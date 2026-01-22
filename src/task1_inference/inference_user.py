@@ -1,12 +1,17 @@
+import sys
+import io
+# 윈도우 인코딩 에러 방지 (강제 UTF-8 설정)
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 import json
 import torch
-from unsloth import FastLanguageModel
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from sentence_transformers import SentenceTransformer
 from tqdm import tqdm # 진행률 바 표시
 
 # --- 설정 (Configuration) ---
 # [변경] 16GB VRAM 성능 극대화를 위해 14B 모델 사용
-LLM_MODEL_ID = "unsloth/Qwen2.5-14B-Instruct-bnb-4bit"
+# Unsloth 대신 transformers 직접 사용 (Windows 호환)
+LLM_MODEL_ID = "Qwen/Qwen2.5-14B-Instruct"
 EMBED_MODEL_ID = "BAAI/bge-m3"
 
 # 파일 경로
@@ -14,15 +19,25 @@ INPUT_FILE = "./data/raw/dummy_users.json"
 OUTPUT_FILE = "./data/processed/user_profiles_vectorized.json"
 
 def main():
-    # 1. LLM 로드 (Unsloth 최적화)
+    # 1. LLM 로드 (transformers + bitsandbytes 4bit 양자화)
     print(f">>> [1/3] LLM 로드 중... ({LLM_MODEL_ID})")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name = LLM_MODEL_ID,
-        max_seq_length = 2048, # 넉넉하게 설정
-        dtype = None,
-        load_in_4bit = True,
+
+    # 4bit 양자화 설정
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
     )
-    FastLanguageModel.for_inference(model) # 추론 속도 2배 향상
+
+    tokenizer = AutoTokenizer.from_pretrained(LLM_MODEL_ID)
+    model = AutoModelForCausalLM.from_pretrained(
+        LLM_MODEL_ID,
+        quantization_config=bnb_config,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    model.eval()  # 추론 모드 설정
 
     # 2. 임베딩 모델 로드
     print(f">>> [2/3] 임베딩 모델 로드 중... ({EMBED_MODEL_ID})")
@@ -78,12 +93,14 @@ def main():
         ).to("cuda")
 
         # 생성
-        outputs = model.generate(
-            input_ids=inputs, 
-            max_new_tokens=128,
-            use_cache=True,
-            temperature=0.3, # 창의성 억제, 정확도 위주
-        )
+        with torch.no_grad():
+            outputs = model.generate(
+                input_ids=inputs,
+                max_new_tokens=128,
+                use_cache=True,
+                do_sample=True,
+                temperature=0.3, # 창의성 억제, 정확도 위주
+            )
         
         # 결과 텍스트 추출
         decoded_output = tokenizer.batch_decode(outputs[:, inputs.shape[1]:], skip_special_tokens=True)[0]
