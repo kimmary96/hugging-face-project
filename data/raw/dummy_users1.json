@@ -1,0 +1,152 @@
+[
+  {
+    "user_id": "u_001",
+    "items": "나이키 러닝화, 무릎 보호대, 스포츠 선글라스, 러닝 벨트",
+    "target_inference": "운동, 러닝, 건강"
+  },
+  {
+    "user_id": "u_002",
+    "items": "요가 스트랩, 폼롤러, 저항 밴드, 요가 블록",
+    "target_inference": "운동, 요가, 스트레칭"
+  },
+  {
+    "user_id": "u_003",
+    "items": "턱걸이 바, 운동 장갑, 푸쉬업바",
+    "target_inference": "운동, 헬스, 근력"
+  },
+  {
+    "user_id": "u_004",
+    "items": "아기띠, 기저귀, 유모차, 젖병 소독기",
+    "target_inference": "육아, 신생아, 생활"
+  },
+  {
+    "user_id": "u_005",
+    "items": "아기 책, 범보 의자, 블록 장난감",
+    "target_inference": "육아, 유아, 놀이"
+  },
+  {
+    "user_id": "u_006",
+    "items": "게이밍 헤드셋, PS5 듀얼센스, 스팀 기프트카드",
+    "target_inference": "게임, 콘솔, 엔터테인먼트"
+  },
+  {
+    "user_id": "u_007",
+    "items": "대형 마우스패드, 기계식 키보드, 게이밍 모니터, 게이밍 마우스",
+    "target_inference": "게임, PC, 장비"
+  },
+  {
+    "user_id": "u_008",
+    "items": "침낭, 랜턴, 타프, 텐트",
+    "target_inference": "캠핑, 아웃도어, 여행"
+  },
+  {
+    "user_id": "u_009",
+    "items": "아이스박스, 캠핑 테이블, 버너",
+    "target_inference": "캠핑, 요리, 아웃도어"
+  },
+  {
+    "user_id": "u_010",
+    "items": "계량컵, 오븐형 에어프라이어, 베이킹 온도계, 핸드믹서",
+    "target_inference": "베이킹, 홈카페, 요리"
+  },
+  {
+    "user_id": "u_011",
+    "items": "맥북 스탠드, USB 허브, 코딩용 모니터암, 인체공학 키보드",
+    "target_inference": "개발, 재택, 생산성"
+  },
+  {
+    "user_id": "u_012",
+    "items": "브레드보드, 점퍼 케이블, 아두이노",
+    "target_inference": "개발, 메이커, IoT"
+  },
+  {
+    "user_id": "u_013",
+    "items": "무드등, 원목 사이드테이블, 러그, 페이크플랜트",
+    "target_inference": "인테리어, 홈데코, 감성"
+  },
+  {
+    "user_id": "u_014",
+    "items": "벽걸이 액자, 디퓨저, 라탄 바구니",
+    "target_inference": "인테리어, 리빙, 홈스타일"
+  },
+  {
+    "user_id": "u_015",
+    "items": "필름 스캐너, 카메라 스트랩, 35mm 필름",
+    "target_inference": "사진, 필름, 취미"
+  },
+  {
+    "user_id": "u_016",
+    "items": "자전거 라이트, 공기주입 펌프, 로드자전거 헬멧",
+    "target_inference": "자전거, 라이딩, 운동"
+  },
+  {
+    "user_id": "u_017",
+    "items": "등산 모자, 방수 등산화, 등산 스틱",
+    "target_inference": "등산, 아웃도어, 건강"
+  },
+  {
+    "user_id": "u_018",
+    "items": "낚시 조끼, 미끼 세트, 릴, 낚시대",
+    "target_inference": "낚시, 레저, 아웃도어"
+  },
+  {
+    "user_id": "u_019",
+    "items": "배변패드, 자동 급식기, 반려견 하네스, 강아지 간식",
+    "target_inference": "반려동물, 강아지, 돌봄"
+  },
+  {
+    "user_id": "u_020",
+    "items": "스크래처, 자동 화장실, 고양이 캣타워, 고양이 간식",
+    "target_inference": "반려동물, 고양이, 놀이"
+  },
+  {
+    "user_id": "u_021",
+    "items": "바이닐 레코드, 스피커, LP 턴테이블",
+    "target_inference": "음악, 아날로그, 취향"
+  },
+  {
+    "user_id": "u_022",
+    "items": "북커버, 책갈피 세트, 독서등",
+    "target_inference": "독서, 취미, 자기계발"
+  },
+  {
+    "user_id": "u_023",
+    "items": "보호대 세트, 스케이트보드, 스케이트 툴",
+    "target_inference": "스트릿, 보드, 스포츠"
+  },
+  {
+    "user_id": "u_024",
+    "items": "휴대용 랜딩패드, 드론, ND 필터",
+    "target_inference": "드론, 촬영, 취미"
+  },
+  {
+    "user_id": "u_025",
+    "items": "스포츠 양말, 라켓 케이스, 탁구 라켓, 탁구공 세트",
+    "target_inference": "운동, 탁구, 건강"
+  },
+  {
+    "user_id": "u_026",
+    "items": "전동 그라인더, 드립 포트, 커피 원두, 핸드드립 세트",
+    "target_inference": "커피, 홈카페, 취미"
+  },
+  {
+    "user_id": "u_027",
+    "items": "아기 장난감, 게이밍 키보드, 소음 방지 헤드셋",
+    "target_inference": "육아, 게임, 재택"
+  },
+  {
+    "user_id": "u_028",
+    "items": "캠핑 텐트, 커피 원두, 휴대용 핸드드립 세트",
+    "target_inference": "캠핑, 커피, 아웃도어"
+  },
+  {
+    "user_id": "u_029",
+    "items": "요가 매트, 베이킹 오븐, 앞치마",
+    "target_inference": "운동, 베이킹, 라이프스타일"
+  },
+  {
+    "user_id": "u_030",
+    "items": "레고 세트, NAS 하드, 랜 케이블",
+    "target_inference": "취미, 수집, 개발"
+  }
+]
