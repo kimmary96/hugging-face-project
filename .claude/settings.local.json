@@ -5,7 +5,8 @@
       "Bash(cmd //c:*)",
       "Bash(cmd /c \"conda activate hf-py311 && python -c \"\"import torch; print\\(torch.__version__\\)\"\"\")",
       "Bash(C:UsersUserminiconda3envshf-py311python.exe -c \"import torch; print\\(torch.__version__\\)\")",
-      "Bash(cmd /c \"C:\\\\Users\\\\User\\\\miniconda3\\\\envs\\\\hf-py311\\\\python.exe -c \"\"import torch; print\\(torch.__version__\\)\"\"\")"
+      "Bash(cmd /c \"C:\\\\Users\\\\User\\\\miniconda3\\\\envs\\\\hf-py311\\\\python.exe -c \"\"import torch; print\\(torch.__version__\\)\"\"\")",
+      "Bash(python:*)"
     ]
   }
 }
