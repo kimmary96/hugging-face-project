@@ -27,7 +27,17 @@ def main():
     # 2. 임베딩 모델 로드
     print(f">>> [2/3] 임베딩 모델 로드 중... ({EMBED_MODEL_ID})")
     # LLM이 9.3GB, 임베딩이 1.5GB 정도 쓰므로 16GB VRAM에서 동시 실행 가능합니다.
-    embed_model = SentenceTransformer(EMBED_MODEL_ID, device="cuda")
+    try:
+        embed_model = SentenceTransformer(
+            EMBED_MODEL_ID,
+            device="cuda",
+            model_kwargs={"use_safetensors": True},
+        )
+    except OSError as exc:
+        # Fallback for models without safetensors artifacts.
+        if "safetensors" not in str(exc):
+            raise
+        embed_model = SentenceTransformer(EMBED_MODEL_ID, device="cuda")
 
     # 3. 데이터 로드
     try:
@@ -42,7 +52,7 @@ def main():
     
     # Qwen 시스템 프롬프트 (페르소나 부여)
     system_prompt = """당신은 e-커머스 데이터 분석 전문가입니다. 
-    유저의 구매 물품 목록을 보고, 그들의 **핵심 관심사 키워드 3~5개**를 추론하세요.
+    유저의 판매 예정 물품 목록을 보고, 그들의 **핵심 관심사 키워드 3~5개**를 추론하세요.
     
     [규칙]
     1. 설명하지 말고 키워드만 쉼표(,)로 구분해서 출력할 것.
@@ -53,7 +63,7 @@ def main():
         items = user['items']
         
         # (A) LLM 추론: Chat Template 적용
-        user_msg = f"구매 물품: {items}\n\n이 유저의 관심사는?"
+        user_msg = f"판매 예정 물품: {items}\n\n이 유저의 관심사는?"
         
         messages = [
             {"role": "system", "content": system_prompt},
