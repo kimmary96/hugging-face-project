@@ -1,0 +1,29 @@
+# Python 관련
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 가상환경 (혹시 프로젝트 내부에 만들었을 경우)
+.env
+venv/
+env/
+danggeun_ai/
+
+# 데이터셋 (용량이 클 수 있으므로 제외, 필요시 raw만 포함)
+data/processed/
+
+# 모델 가중치 및 체크포인트 (절대 올리면 안 됨 - 용량 초과)
+saved_models/
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Unsloth/HuggingFace 캐시
+.cache/
+
+# VSCode 설정
+.vscode/
+
+# 맥(Mac) 사용자라면
+.DS_Store
