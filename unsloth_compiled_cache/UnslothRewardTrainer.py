@@ -1,8 +1,8 @@
 """
 2026.1.3
 2026.1.3
-4.50.3
-0.8.6
+4.56.2
+0.22.2
 __UNSLOTH_VERSIONING__
 """
 
@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 from typing import Any, List, Optional, Tuple, Union, Dict, Set, Callable
-from trl.trainer.reward_trainer import (Any, Callable, DataCollator, Dataset, Dict, EvalPrediction, FrozenInstanceError, List, Optional, PeftModel, PreTrainedModel, PreTrainedTokenizerBase, RewardConfig, RewardDataCollatorWithPadding, RewardTrainer, Trainer, TrainerCallback, TrainingArguments, Tuple, Union, compute_accuracy, inspect, is_peft_available, nested_detach, nn, prepare_model_for_kbit_training, replace, torch, warnings)
+from trl.trainer.reward_trainer import (Any, BaseImageProcessor, Callable, DataCollator, Dataset, EvalPrediction, FeatureExtractionMixin, FrozenInstanceError, Optional, PartialState, Path, PreTrainedModel, PreTrainedTokenizerBase, ProcessorMixin, RewardConfig, RewardDataCollatorWithPadding, RewardTrainer, Trainer, TrainerCallback, Union, _tokenize, compute_accuracy, decode_and_strip_padding, defaultdict, disable_dropout_in_model, gather_object, generate_model_card, get_comet_experiment_url, is_rich_available, is_wandb_available, log_table_to_comet_experiment, logger, logging, maybe_apply_chat_template, nested_detach, nn, os, pd, prepare_peft_model, print_rich_table, replace, torch, Optional, PreTrainedModel, Trainer, logger, os, torch)
 
 
 import os
@@ -300,17 +300,30 @@ def autotune_batch_and_chunks(
 class UnslothRewardConfig(RewardConfig):
     """
     
-    RewardConfig collects all training arguments related to the [`RewardTrainer`] class.
+    Configuration class for the [`RewardTrainer`].
 
-    Using [`HfArgumentParser`] we can turn this class into
+    This class includes only the parameters that are specific to Reward training. For a full list of training
+    arguments, please refer to the [`~transformers.TrainingArguments`] documentation. Note that default values in this
+    class may differ from those in [`~transformers.TrainingArguments`].
+
+    Using [`~transformers.HfArgumentParser`] we can turn this class into
     [argparse](https://docs.python.org/3/library/argparse#module-argparse) arguments that can be specified on the
     command line.
 
     Parameters:
-        max_length (`int`, *optional*, defaults to `None`):
-            The maximum length of the sequences in the batch. This argument is required if you want to use the default data collator.
-        gradient_checkpointing (`bool`, *optional*, defaults to `True`):
-                If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        max_length (`int` or `None`, *optional*, defaults to `1024`):
+            Maximum length of the sequences (prompt + completion) in the batch, filters out entries that exceed the
+            limit. This argument is required if you want to use the default data collator.
+        disable_dropout (`bool`, *optional*, defaults to `True`):
+            Whether to disable dropout in the model.
+        dataset_num_proc (`int`, *optional*, defaults to `None`):
+            Number of processes to use for processing the dataset.
+        center_rewards_coefficient (`float`, *optional*, defaults to `None`):
+            Coefficient to incentivize the reward model to output mean-zero rewards (proposed by
+            https://huggingface.co/papers/2312.09244, Eq. 2). Recommended value: `0.01`.
+        remove_unused_columns (`bool`, *optional*, defaults to `False`):
+            Whether to remove the columns that are not used by the model's forward pass. Can be `True` only if the
+            dataset is pretokenized.
     
     """
     vllm_sampling_params: Optional[Any] = field(
@@ -402,7 +415,7 @@ class UnslothRewardConfig(RewardConfig):
         past_index = -1,
         run_name = None,
         disable_tqdm = None,
-        remove_unused_columns = True,
+        remove_unused_columns = False,
         label_names = None,
         load_best_model_at_end = False,
         metric_for_best_model = None,
@@ -411,9 +424,9 @@ class UnslothRewardConfig(RewardConfig):
         fsdp = '',
         fsdp_min_num_params = 0,
         fsdp_config = None,
-        tp_size = 0,
         fsdp_transformer_layer_cls_to_wrap = None,
         accelerator_config = None,
+        parallelism_config = None,
         deepspeed = None,
         label_smoothing_factor = 0.0,
         optim = 'adamw_8bit',
@@ -436,12 +449,12 @@ class UnslothRewardConfig(RewardConfig):
         hub_token = None,
         hub_private_repo = None,
         hub_always_push = False,
-        gradient_checkpointing = False,
+        hub_revision = None,
+        gradient_checkpointing = True,
         gradient_checkpointing_kwargs = None,
         include_inputs_for_metrics = False,
         eval_do_concat_batches = True,
         fp16_backend = 'auto',
-        evaluation_strategy = None,
         push_to_hub_model_id = None,
         push_to_hub_organization = None,
         push_to_hub_token = None,
@@ -454,8 +467,6 @@ class UnslothRewardConfig(RewardConfig):
         torch_compile = False,
         torch_compile_backend = None,
         torch_compile_mode = None,
-        dispatch_batches = None,
-        split_batches = None,
         include_tokens_per_second = False,
         include_num_input_tokens_seen = False,
         neftune_noise_alpha = None,
@@ -463,9 +474,13 @@ class UnslothRewardConfig(RewardConfig):
         batch_eval_metrics = False,
         eval_on_start = False,
         use_liger_kernel = False,
+        liger_kernel_config = None,
         eval_use_gather_object = False,
-        average_tokens_across_devices = False,
-        max_length = None,
+        average_tokens_across_devices = True,
+        max_length = 1024,
+        disable_dropout = True,
+        dataset_num_proc = None,
+        center_rewards_coefficient = None,
         vllm_sampling_params = None,
         unsloth_num_chunks = -1,
         unsloth_logit_chunk_multiplier = None, 
@@ -478,6 +493,14 @@ class UnslothRewardConfig(RewardConfig):
         if output_dir is None and save_strategy == 'steps' and save_steps == 500:
             output_dir = 'unsloth_training_checkpoints'
             save_strategy = 'no'
+        if dataset_num_proc is None:
+            import psutil
+            dataset_num_proc = min(max((psutil.cpu_count() or 1)+4, 2), 64)
+            memory_gb_left = psutil.virtual_memory().available / (1024**3)
+            if   memory_gb_left <=  4: dataset_num_proc = 1 # Too risky, so set to 1
+            elif memory_gb_left <=  6: dataset_num_proc = min(2, dataset_num_proc)
+            elif memory_gb_left <= 10: dataset_num_proc = min(4, dataset_num_proc)
+            elif memory_gb_left <= 14: dataset_num_proc = min(6, dataset_num_proc)
         
         super().__init__(
             output_dir = output_dir,
@@ -556,9 +579,9 @@ class UnslothRewardConfig(RewardConfig):
             fsdp = fsdp,
             fsdp_min_num_params = fsdp_min_num_params,
             fsdp_config = fsdp_config,
-            tp_size = tp_size,
             fsdp_transformer_layer_cls_to_wrap = fsdp_transformer_layer_cls_to_wrap,
             accelerator_config = accelerator_config,
+            parallelism_config = parallelism_config,
             deepspeed = deepspeed,
             label_smoothing_factor = label_smoothing_factor,
             optim = optim,
@@ -581,12 +604,12 @@ class UnslothRewardConfig(RewardConfig):
             hub_token = hub_token,
             hub_private_repo = hub_private_repo,
             hub_always_push = hub_always_push,
+            hub_revision = hub_revision,
             gradient_checkpointing = gradient_checkpointing,
             gradient_checkpointing_kwargs = gradient_checkpointing_kwargs,
             include_inputs_for_metrics = include_inputs_for_metrics,
             eval_do_concat_batches = eval_do_concat_batches,
             fp16_backend = fp16_backend,
-            evaluation_strategy = evaluation_strategy,
             push_to_hub_model_id = push_to_hub_model_id,
             push_to_hub_organization = push_to_hub_organization,
             push_to_hub_token = push_to_hub_token,
@@ -599,8 +622,6 @@ class UnslothRewardConfig(RewardConfig):
             torch_compile = torch_compile,
             torch_compile_backend = torch_compile_backend,
             torch_compile_mode = torch_compile_mode,
-            dispatch_batches = dispatch_batches,
-            split_batches = split_batches,
             include_tokens_per_second = include_tokens_per_second,
             include_num_input_tokens_seen = include_num_input_tokens_seen,
             neftune_noise_alpha = neftune_noise_alpha,
@@ -608,9 +629,13 @@ class UnslothRewardConfig(RewardConfig):
             batch_eval_metrics = batch_eval_metrics,
             eval_on_start = eval_on_start,
             use_liger_kernel = use_liger_kernel,
+            liger_kernel_config = liger_kernel_config,
             eval_use_gather_object = eval_use_gather_object,
             average_tokens_across_devices = average_tokens_across_devices,
-            max_length = max_length,**kwargs)
+            max_length = max_length,
+            disable_dropout = disable_dropout,
+            dataset_num_proc = dataset_num_proc,
+            center_rewards_coefficient = center_rewards_coefficient,**kwargs)
         self.vllm_sampling_params = vllm_sampling_params
         self.unsloth_num_chunks = unsloth_num_chunks
         if unsloth_grpo_mini_batch is not None:
@@ -626,8 +651,6 @@ class UnslothRewardConfig(RewardConfig):
 pass
 
 class _UnslothRewardTrainer(Trainer):
-    r""""""
-
     _tag_names = ["trl", "reward-trainer"]
 
     def __init__(
@@ -636,18 +659,19 @@ class _UnslothRewardTrainer(Trainer):
         args: Optional[RewardConfig] = None,
         data_collator: Optional[DataCollator] = None,
         train_dataset: Optional[Dataset] = None,
-        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
+        processing_class: Optional[
+            Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
+        ] = None,
         model_init: Optional[Callable[[], PreTrainedModel]] = None,
-        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
-        callbacks: Optional[List[TrainerCallback]] = None,
-        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (
+        compute_metrics: Optional[Callable[[EvalPrediction], dict]] = None,
+        callbacks: Optional[list[TrainerCallback]] = None,
+        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (
             None,
             None,
         ),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
-        max_length: Optional[int] = None,
-        peft_config: Optional[Dict] = None,
+        peft_config: Optional[dict] = None,
     ):
         """
         Initialize RewardTrainer.
@@ -658,102 +682,52 @@ class _UnslothRewardTrainer(Trainer):
             args (`RewardConfig`):
                 The arguments to use for training.
             data_collator (`transformers.DataCollator`):
-                The data collator to use for training. If None is specified, the default data collator (`RewardDataCollatorWithPadding`) will be used
-                which will pad the sequences to the maximum length of the sequences in the batch, given a dataset of paired sequences.
+                The data collator to use for training. If None is specified, the default data collator
+                (`RewardDataCollatorWithPadding`) will be used which will pad the sequences to the maximum length of
+                the sequences in the batch, given a dataset of paired sequences.
             train_dataset (`datasets.Dataset`):
                 The dataset to use for training.
             eval_dataset (`datasets.Dataset`):
                 The dataset to use for evaluation.
-            tokenizer (`transformers.PreTrainedTokenizerBase`):
-                The tokenizer to use for training. This argument is required if you want to use the default data collator.
+            processing_class ([`~transformers.PreTrainedTokenizerBase`], [`~transformers.BaseImageProcessor`], [`~transformers.FeatureExtractionMixin`] or [`~transformers.ProcessorMixin`], *optional*, defaults to `None`):
+                Processing class used to process the data. If provided, will be used to automatically process the
+                inputs for the model, and it will be saved along the model to make it easier to rerun an interrupted
+                training or reuse the fine-tuned model.
             model_init (`Callable[[], transformers.PreTrainedModel]`):
-                The model initializer to use for training. If None is specified, the default model initializer will be used.
-            compute_metrics (`Callable[[transformers.EvalPrediction], Dict]`, *optional* defaults to `compute_accuracy`):
-                The metrics to use for evaluation. If no metrics are specified, the default metric (`compute_accuracy`) will be used.
-            callbacks (`List[transformers.TrainerCallback]`):
+                The model initializer to use for training. If None is specified, the default model initializer will be
+                used.
+            compute_metrics (`Callable[[transformers.EvalPrediction], dict]`, *optional* defaults to `compute_accuracy`):
+                The metrics to use for evaluation. If no metrics are specified, the default metric (`compute_accuracy`)
+                will be used.
+            callbacks (`list[transformers.TrainerCallback]`):
                 The callbacks to use for training.
-            optimizers (`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`):
+            optimizers (`tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`):
                 The optimizer and scheduler to use for training.
             preprocess_logits_for_metrics (`Callable[[torch.Tensor, torch.Tensor], torch.Tensor]`):
                 The function to use to preprocess the logits before computing the metrics.
-            max_length (`int`, defaults to `None`):
-                The maximum length of the sequences in the batch. This argument is required if you want to use the default data collator.
-            peft_config (`Dict`, defaults to `None`):
-                The PEFT configuration to use for training. If you pass a PEFT configuration, the model will be wrapped in a PEFT model.
+            peft_config (`dict`, defaults to `None`):
+                The PEFT configuration to use for training. If you pass a PEFT configuration, the model will be wrapped
+                in a PEFT model.
         """
-        if type(args) == TrainingArguments:
-            warnings.warn(
-                "Using `transformers.TrainingArguments` for `args` is deprecated and will be removed in a future version. Please use `RewardConfig` instead.",
-                FutureWarning,
-            )
-            if max_length is not None:
-                warnings.warn(
-                    "The `max_length` argument is deprecated and will be removed in a future version. Please use the `RewardConfig` to set `max_length` instead.",
-                    FutureWarning,
-                )
-        else:
-            if max_length is not None and args.max_length is not None:
-                raise ValueError(
-                    "You cannot specify both `max_length` and `args.max_length`. Please use the `RewardConfig` to set `max_length` once."
-                )
-            if max_length is not None and args.max_length is None:
-                warnings.warn(
-                    "The `max_length` argument is deprecated and will be removed in a future version. Please use the `RewardConfig` to set `max_length` instead.",
-                    FutureWarning,
-                )
-        if not is_peft_available() and peft_config is not None:
-            raise ValueError(
-                "PEFT is not installed and you passed a `peft_config` in the trainer's kwargs, please install it to use the PEFT models"
-            )
-        elif is_peft_available() and peft_config is not None:
-            if not isinstance(model, PeftModel):
-                if getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_quantized", False):
-                    _supports_gc_kwargs = "gradient_checkpointing_kwargs" in list(
-                        inspect.signature(prepare_model_for_kbit_training).parameters
-                    )
+        if False:
+            model = prepare_peft_model(model, peft_config, args)
 
-                    prepare_model_kwargs = {"use_gradient_checkpointing": args.gradient_checkpointing}
-
-                    if not _supports_gc_kwargs and args.gradient_checkpointing_kwargs is not None:
-                        warnings.warn(
-                            "You passed `gradient_checkpointing_kwargs` in the trainer's kwargs, but your peft version does not support it. "
-                            "please update to the latest version of peft to use `gradient_checkpointing_kwargs`."
-                        )
-                    elif _supports_gc_kwargs and args.gradient_checkpointing_kwargs is not None:
-                        prepare_model_kwargs["gradient_checkpointing_kwargs"] = args.gradient_checkpointing_kwargs
-
-                    model = prepare_model_for_kbit_training(model, **prepare_model_kwargs)
-
-                model = model
+        # Disable dropout in the model
+        if args.disable_dropout:
+            disable_dropout_in_model(model)
 
         if compute_metrics is None:
             compute_metrics = compute_accuracy
 
         if data_collator is None:
-            if tokenizer is None:
+            if processing_class is None:
                 raise ValueError(
-                    "max_length or a tokenizer must be specified when using the default RewardDataCollatorWithPadding"
+                    "A processing_class must be specified when using the default RewardDataCollatorWithPadding"
                 )
-            if type(args) == TrainingArguments:
-                if max_length is None:
-                    warnings.warn(
-                        "When using RewardDataCollatorWithPadding, you should set `max_length` in RewardConfig."
-                        " It will be set to `512` by default, but you should do it yourself in the future.",
-                        UserWarning,
-                    )
-                    max_length = 512
-            else:
-                if max_length is None and args.max_length is None:
-                    warnings.warn(
-                        "When using RewardDataCollatorWithPadding, you should set `max_length` in RewardConfig."
-                        " It will be set to `512` by default, but you should do it yourself in the future.",
-                        UserWarning,
-                    )
-                    max_length = 512
-                if max_length is None and args.max_length is not None:
-                    max_length = args.max_length
 
-            data_collator = RewardDataCollatorWithPadding(tokenizer, max_length=max_length)
+            max_length = args.max_length
+
+            data_collator = RewardDataCollatorWithPadding(processing_class)
 
             if args.remove_unused_columns:
                 try:  # for bc before https://github.com/huggingface/transformers/pull/25435
@@ -761,22 +735,67 @@ class _UnslothRewardTrainer(Trainer):
                 except FrozenInstanceError:
                     args = replace(args, remove_unused_columns=False)
                 # warn users
-                warnings.warn(
+                logger.warning(
                     "When using RewardDataCollatorWithPadding, you should set `remove_unused_columns=False` in your RewardConfig"
                     " we have set it for you, but you should do it yourself in the future.",
-                    UserWarning,
                 )
 
             self.use_reward_data_collator = True
         else:
             self.use_reward_data_collator = False
+
+        # The trainer estimates the number of FLOPs [floating-point operations] using the number of elements in the
+        # input tensor associated with the key "input_ids". However, in Reward, the sampled data does not include the
+        # "input_ids" key. Instead, the available keys are "input_ids_chosen" and "input_ids_rejected". As a result,
+        # the trainer issues the warning: "Could not estimate the number of tokens of the input, floating-point
+        # operations will not be computed." To suppress this warning, we set the "estimate_tokens" key in the model's
+        # "warnings_issued" dictionary to True. This acts as a flag to indicate that the warning has already been
+        # issued.
+        model.warnings_issued["estimate_tokens"] = True
+
+        if "input_ids_chosen" not in train_dataset.column_names:
+            with PartialState().main_process_first():
+                fn_kwargs = {"tokenizer": processing_class}
+                train_dataset = train_dataset.map(maybe_apply_chat_template, fn_kwargs={"tokenizer": processing_class})
+                train_dataset = train_dataset.map(
+                    _tokenize,
+                    batched=True,
+                    fn_kwargs=fn_kwargs,
+                    num_proc=args.dataset_num_proc,
+                )
+                # This filter is important because otherwise you get samples that exceed the model's context length and
+                # get truncated => noisy signal the chosen/rejected label gets lost. The downside is that the
+                # user might get surprised if N samples are missing from training.
+                train_dataset = train_dataset.filter(
+                    lambda x: len(x["input_ids_chosen"]) <= max_length and len(x["input_ids_rejected"]) <= max_length,
+                    num_proc=args.dataset_num_proc,
+                )
+                if eval_dataset is not None:
+                    eval_dataset = eval_dataset.map(
+                        maybe_apply_chat_template, fn_kwargs={"tokenizer": processing_class}
+                    )
+                    eval_dataset = eval_dataset.map(
+                        _tokenize,
+                        fn_kwargs=fn_kwargs,
+                        batched=True,
+                        num_proc=args.dataset_num_proc,
+                    )
+                    # This filter is important because otherwise you get samples that exceed the model's context length and
+                    # get truncated => noisy signal the chosen/rejected label gets lost. The downside is that the
+                    # user might get surprised if N samples are missing from training.
+                    eval_dataset = eval_dataset.filter(
+                        lambda x: len(x["input_ids_chosen"]) <= max_length
+                        and len(x["input_ids_rejected"]) <= max_length,
+                        num_proc=args.dataset_num_proc,
+                    )
+
         super().__init__(
             model=model,
             args=args,
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
+            processing_class=processing_class,
             model_init=model_init,
             compute_metrics=compute_metrics,
             callbacks=callbacks,
@@ -791,15 +810,10 @@ class _UnslothRewardTrainer(Trainer):
     def compute_loss(
         self,
         model: Union[PreTrainedModel, nn.Module],
-        inputs: Dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, Union[torch.Tensor, Any]],
         return_outputs=False,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, Dict[str, torch.Tensor]]]:
-        if not self.use_reward_data_collator:
-            warnings.warn(
-                "The current compute_loss is implemented for RewardDataCollatorWithPadding,"
-                " if you are using a custom data collator make sure you know what you are doing or"
-                " implement your own compute_loss method."
-            )
+        num_items_in_batch=None,
+    ) -> Union[torch.Tensor, tuple[torch.Tensor, dict[str, torch.Tensor]]]:
         rewards_chosen = model(
             input_ids=inputs["input_ids_chosen"],
             attention_mask=inputs["attention_mask_chosen"],
@@ -816,6 +830,9 @@ class _UnslothRewardTrainer(Trainer):
         else:
             loss = -nn.functional.logsigmoid(rewards_chosen - rewards_rejected).mean()
 
+        if self.args.center_rewards_coefficient is not None:
+            loss += self.args.center_rewards_coefficient * torch.mean((rewards_chosen + rewards_rejected) ** 2)
+
         if return_outputs:
             return loss, {
                 "rewards_chosen": rewards_chosen,
@@ -826,10 +843,10 @@ class _UnslothRewardTrainer(Trainer):
     def prediction_step(
         self,
         model: Union[PreTrainedModel, nn.Module],
-        inputs: Dict[str, Union[torch.Tensor, Any]],
+        inputs: dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
-        ignore_keys: Optional[List[str]] = None,
-    ) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
+        ignore_keys: Optional[list[str]] = None,
+    ) -> tuple[Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
             if hasattr(self.model, "config"):
@@ -854,25 +871,113 @@ class _UnslothRewardTrainer(Trainer):
         labels = self._prepare_inputs(labels)
 
         return loss, logits, labels
+
+    def evaluate(self, *args, **kwargs):
+        num_print_samples = kwargs.pop("num_print_samples", 4)
+        self.visualize_samples(num_print_samples)
+        return super().evaluate(*args, **kwargs)
+
+    def visualize_samples(self, num_print_samples: int):
+        """
+        Visualize the reward model logits prediction
+
+        Args:
+            num_print_samples (`int`, defaults to `4`):
+                The number of samples to print. Set to `-1` to print all samples.
+        """
+        eval_dataloader = self.get_eval_dataloader()
+        table = defaultdict(list)
+        for _, inputs in enumerate(eval_dataloader):
+            _, logits, _ = self.prediction_step(self.model, inputs, prediction_loss_only=False)
+            chosen_text = decode_and_strip_padding(inputs["input_ids_chosen"], self.processing_class)
+            rejected_text = decode_and_strip_padding(inputs["input_ids_rejected"], self.processing_class)
+            table["chosen_text"].extend(gather_object(chosen_text))
+            table["rejected_text"].extend(gather_object(rejected_text))
+            table["logits"].extend(
+                gather_object([[round(inner_item, 4) for inner_item in item] for item in logits.tolist()])
+            )
+            if num_print_samples >= 0 and len(table["chosen_text"]) >= num_print_samples:
+                break
+        df = pd.DataFrame(table)
+        if self.accelerator.process_index == 0:
+            if is_rich_available():
+                print_rich_table(df[:num_print_samples])
+            if "wandb" in self.args.report_to:
+                import wandb
+
+                if wandb.run is not None:
+                    wandb.log({"completions": wandb.Table(dataframe=df)})
+
+            if "comet_ml" in self.args.report_to:
+                log_table_to_comet_experiment(
+                    name="completions.csv",
+                    table=df,
+                )
+
+    # Ensure the model card is saved along with the checkpoint
+    def _save_checkpoint(self, model, trial):
+        if self.args.hub_model_id is None:
+            model_name = Path(self.args.output_dir).name
+        else:
+            model_name = self.args.hub_model_id.split("/")[-1]
+        self.create_model_card(model_name=model_name)
+        super()._save_checkpoint(model, trial)
+
+    def create_model_card(
+        self,
+        model_name: Optional[str] = None,
+        dataset_name: Optional[str] = None,
+        tags: Union[str, list[str], None] = None,
+    ):
+        """
+        Creates a draft of a model card using the information available to the `Trainer`.
+
+        Args:
+            model_name (`str` or `None`, *optional*, defaults to `None`):
+                Name of the model.
+            dataset_name (`str` or `None`, *optional*, defaults to `None`):
+                Name of the dataset used for training.
+            tags (`str`, `list[str]` or `None`, *optional*, defaults to `None`):
+                Tags to be associated with the model card.
+        """
+        if not self.is_world_process_zero():
+            return
+
+        if hasattr(self.model.config, "_name_or_path") and not os.path.isdir(self.model.config._name_or_path):
+            base_model = self.model.config._name_or_path
+        else:
+            base_model = None
+
+        # normalize `tags` to a mutable set
+        if tags is None:
+            tags = set()
+        elif isinstance(tags, str):
+            tags = {tags}
+        else:
+            tags = set(tags)
+
+        if hasattr(self.model.config, "unsloth_version"):
+            tags.add("unsloth")
+
+        if "JOB_ID" in os.environ:
+            tags.add("hf_jobs")
+
+        tags.update(self._tag_names)
+
+        model_card = generate_model_card(
+            base_model=base_model,
+            model_name=model_name,
+            hub_model_id=self.hub_model_id,
+            dataset_name=dataset_name,
+            tags=tags,
+            wandb_url=wandb.run.url if is_wandb_available() and wandb.run is not None else None,
+            comet_url=get_comet_experiment_url(),
+            trainer_name="Reward",
+        )
+
+        model_card.save(os.path.join(self.args.output_dir, "README.md"))
 class UnslothRewardTrainer(_UnslothRewardTrainer):
     """
-    
-    The RewardTrainer can be used to train your custom Reward Model. It is a subclass of the
-    `transformers.Trainer` class and inherits all of its attributes and methods. It is recommended to use
-    an `AutoModelForSequenceClassification` as the reward model. The reward model should be trained on a dataset
-    of paired examples, where each example is a tuple of two sequences. The reward model should be trained to
-    predict which example in the pair is more relevant to the task at hand.
-
-    The reward trainer expects a very specific format for the dataset. The dataset should contain two 4 entries at least
-    if you don't use the default `RewardDataCollatorWithPadding` data collator. The entries should be named
-    - `input_ids_chosen`
-    - `attention_mask_chosen`
-    - `input_ids_rejected`
-    - `attention_mask_rejected`
-
-    Optionally, you can also pass a `margin` entry to the dataset. This entry should contain the margin used to modulate the
-    loss of the reward model as outlined in https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/.
-    If you don't pass a margin, no margin will be used.
     
     """
     def __init__(
@@ -882,12 +987,11 @@ class UnslothRewardTrainer(_UnslothRewardTrainer):
         data_collator = None,
         train_dataset = None,
         eval_dataset = None,
-        tokenizer = None,
+        processing_class = None,
         model_init = None,
         compute_metrics = None,
         callbacks = None,
         preprocess_logits_for_metrics = None,
-        max_length = None,
         peft_config = None,
         **kwargs
     ):
@@ -1034,12 +1138,11 @@ class UnslothRewardTrainer(_UnslothRewardTrainer):
             data_collator = data_collator,
             train_dataset = train_dataset,
             eval_dataset = eval_dataset,
-            tokenizer = tokenizer,
+            processing_class = processing_class,
             model_init = model_init,
             compute_metrics = compute_metrics,
             callbacks = callbacks,
             preprocess_logits_for_metrics = preprocess_logits_for_metrics,
-            max_length = max_length,
             peft_config = peft_config,**kwargs)
         if "model" in locals() and hasattr(model, "for_inference"):
             model.for_inference()
@@ -1068,3 +1171,13 @@ class UnslothRewardTrainer(_UnslothRewardTrainer):
         pass
         
 pass
+
+
+if hasattr(logger, "addFilter"):
+    import logging
+    class HideLoggingMessage(logging.Filter):
+        def __init__(self, text): self.text = text
+        def filter(self, x): return not (self.text in x.getMessage())
+    pass
+    logger.addFilter(HideLoggingMessage("`use_cache=True`"))
+

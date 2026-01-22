@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 from typing import Any, List, Optional, Tuple, Union, Dict, Set, Callable
-from trl.trainer.gkd_trainer import (Any, AutoModelForCausalLM, BaseImageProcessor, Callable, DataCollator, DataCollatorForChatML, Dataset, EvalPrediction, F, FeatureExtractionMixin, GKDConfig, GKDTrainer, GenerationConfig, Optional, PeftConfig, PreTrainedModel, PreTrainedTokenizerBase, ProcessorMixin, SFTTrainer, TrainerCallback, Union, disable_dropout_in_model, empty_cache, generate_model_card, get_comet_experiment_url, is_wandb_available, nn, os, prepare_deepspeed, random, textwrap, torch, unwrap_model_for_generation)
+from trl.trainer.iterative_sft_trainer import (AutoModelForCausalLM, AutoTokenizer, BaseImageProcessor, Callable, DataCollator, DataCollatorForLanguageModeling, DataCollatorForSeq2Seq, DataLoader, Dataset, EvalLoopOutput, FeatureExtractionMixin, IterativeSFTConfig, IterativeSFTTrainer, Optional, PPODecorators, Path, PeftModel, PreTrainedModel, PreTrainedTokenizerBase, ProcessorMixin, Trainer, TrainingArguments, Union, generate_model_card, get_comet_experiment_url, is_peft_available, is_wandb_available, logger, logging, os, torch, warnings, Optional, PeftModel, PreTrainedModel, Trainer, is_peft_available, logger, os, torch)
 
 
 import os
@@ -297,36 +297,40 @@ def autotune_batch_and_chunks(
 
     return final_b, final_m
 @dataclass
-class UnslothGKDConfig(GKDConfig):
+class UnslothIterativeSFTConfig(IterativeSFTConfig):
     """
     
-    Configuration class for [`GKDTrainer`].
+    Configuration class for the [`IterativeSFTTrainer`].
 
-    This class includes only the parameters that are specific to GKD training. For a full list of training arguments,
-    please refer to the [`~transformers.TrainingArguments`] and [`SFTConfig`] documentation.
+    <Tip warning={true}>
 
-    Args:
-        temperature (`float`, *optional*, defaults to `0.9`):
-            Temperature for sampling. The higher the temperature, the more random the completions.
-        lmbda (`float`, *optional*, defaults to `0.5`):
-            Lambda parameter that controls the student data fraction (i.e., the proportion of on-policy
-            student-generated outputs).
-        beta (`float`, *optional*, defaults to `0.5`):
-            Interpolation coefficient between `0.0` and `1.0` of the Generalized Jensen-Shannon Divergence loss. When
-            beta is `0.0`, the loss is the KL divergence. When beta is `1.0`, the loss is the Inverse KL Divergence.
-        max_new_tokens (`int`, *optional*, defaults to `128`):
-            Maximum number of tokens to generate per completion.
-        teacher_model_name_or_path (`str` or `None`, *optional*, defaults to `None`):
-            Model name or path of the teacher model. If `None`, the teacher model will be the same as the model being
-            trained.
-        teacher_model_init_kwargs (`dict[str, Any]]` or `None`, *optional*, defaults to `None`):
-            Keyword arguments to pass to `AutoModelForCausalLM.from_pretrained` when instantiating the teacher model
-            from a string.
-        disable_dropout (`bool`, *optional*, defaults to `True`):
-            Whether to disable dropout in the model.
-        seq_kd (`bool`, *optional*, defaults to `False`):
-            Seq_kd parameter that controls whether to perform Sequence-Level KD (can be viewed as supervised FT on
-            teacher-generated output).
+    The [`IterativeSFTTrainer`] is deprecated and will be removed in version 0.24.0. Please use the [`SFTTrainer`].
+
+    </Tip>
+
+    This class includes only the parameters that are specific to Iterative SFT training. For a full list of training
+    arguments, please refer to the [`~transformers.TrainingArguments`] documentation. Note that default values in this
+    class may differ from those in [`~transformers.TrainingArguments`].
+
+    Using [`~transformers.HfArgumentParser`] we can turn this class into
+    [argparse](https://docs.python.org/3/library/argparse#module-argparse) arguments that can be specified on the
+    command line.
+
+    Parameters:
+        > Parameters that control the model
+
+        model_init_kwargs (`dict[str, Any]` or `None`, *optional*, defaults to `None`):
+            Keyword arguments for [`~transformers.AutoModelForCausalLM.from_pretrained`], used when the `model`
+            argument of the [`IterativeSFTTrainer`] is provided as a string.
+
+        > Parameters that control the data preprocessing
+
+        max_length (`int` or `None`, *optional*, defaults to `None`):
+            Maximum length of the tokenized sequence. Sequences longer than `max_length` are truncated.
+        truncation_mode (`str`, *optional*, defaults to `"keep_end"`):
+            The truncation mode to use, either `"keep_end"` or `"keep_start"`.
+        optimize_device_cache (`bool`, *optional*, defaults to `False`):
+            Whether to optimize accelerator cache for slightly more memory-efficient training.
     
     """
     vllm_sampling_params: Optional[Any] = field(
@@ -481,29 +485,9 @@ class UnslothGKDConfig(GKDConfig):
         eval_use_gather_object = False,
         average_tokens_across_devices = True,
         model_init_kwargs = None,
-        chat_template_path = None,
-        dataset_text_field = 'text',
-        dataset_kwargs = None,
-        dataset_num_proc = None,
-        eos_token = None,
-        pad_token = None,
-        max_length = 1024,
-        packing = False,
-        packing_strategy = 'bfd',
-        padding_free = False,
-        pad_to_multiple_of = None,
-        eval_packing = None,
-        completion_only_loss = None,
-        assistant_only_loss = False,
-        activation_offloading = False,
-        temperature = 0.9,
-        lmbda = 0.5,
-        beta = 0.5,
-        max_new_tokens = 128,
-        teacher_model_name_or_path = None,
-        teacher_model_init_kwargs = None,
-        disable_dropout = True,
-        seq_kd = False,
+        max_length = None,
+        truncation_mode = 'keep_end',
+        optimize_device_cache = False,
         vllm_sampling_params = None,
         unsloth_num_chunks = -1,
         unsloth_logit_chunk_multiplier = None, 
@@ -516,25 +500,6 @@ class UnslothGKDConfig(GKDConfig):
         if output_dir is None and save_strategy == 'steps' and save_steps == 500:
             output_dir = 'unsloth_training_checkpoints'
             save_strategy = 'no'
-        if dataset_num_proc is None:
-            import psutil
-            dataset_num_proc = min(max((psutil.cpu_count() or 1)+4, 2), 64)
-            memory_gb_left = psutil.virtual_memory().available / (1024**3)
-            if   memory_gb_left <=  4: dataset_num_proc = 1 # Too risky, so set to 1
-            elif memory_gb_left <=  6: dataset_num_proc = min(2, dataset_num_proc)
-            elif memory_gb_left <= 10: dataset_num_proc = min(4, dataset_num_proc)
-            elif memory_gb_left <= 14: dataset_num_proc = min(6, dataset_num_proc)
-        if os.environ.get('UNSLOTH_ENABLE_FLEX_ATTENTION', '0') == '1':
-            from unsloth_zoo.flex_attention import HAS_FLEX_ATTENTION
-            if HAS_FLEX_ATTENTION and pad_to_multiple_of is None:
-                from unsloth_zoo.flex_attention import FLEX_ATTENTION_BLOCK_SIZE
-                pad_to_multiple_of = FLEX_ATTENTION_BLOCK_SIZE
-        
-        if temperature <= 0:
-            raise ValueError('Unsloth: Please set a positive non-zero temperature since your results will be wrong.')
-        elif temperature >= 10:
-            raise ValueError('Unsloth: Please set a positive non-zero temperature less than 10, since sampling will be quite erratic.')
-        
         
         super().__init__(
             output_dir = output_dir,
@@ -667,29 +632,9 @@ class UnslothGKDConfig(GKDConfig):
             eval_use_gather_object = eval_use_gather_object,
             average_tokens_across_devices = average_tokens_across_devices,
             model_init_kwargs = model_init_kwargs,
-            chat_template_path = chat_template_path,
-            dataset_text_field = dataset_text_field,
-            dataset_kwargs = dataset_kwargs,
-            dataset_num_proc = dataset_num_proc,
-            eos_token = eos_token,
-            pad_token = pad_token,
             max_length = max_length,
-            packing = packing,
-            packing_strategy = packing_strategy,
-            padding_free = padding_free,
-            pad_to_multiple_of = pad_to_multiple_of,
-            eval_packing = eval_packing,
-            completion_only_loss = completion_only_loss,
-            assistant_only_loss = assistant_only_loss,
-            activation_offloading = activation_offloading,
-            temperature = temperature,
-            lmbda = lmbda,
-            beta = beta,
-            max_new_tokens = max_new_tokens,
-            teacher_model_name_or_path = teacher_model_name_or_path,
-            teacher_model_init_kwargs = teacher_model_init_kwargs,
-            disable_dropout = disable_dropout,
-            seq_kd = seq_kd,**kwargs)
+            truncation_mode = truncation_mode,
+            optimize_device_cache = optimize_device_cache,**kwargs)
         self.vllm_sampling_params = vllm_sampling_params
         self.unsloth_num_chunks = unsloth_num_chunks
         if unsloth_grpo_mini_batch is not None:
@@ -704,332 +649,360 @@ class UnslothGKDConfig(GKDConfig):
         self.max_seq_length = max_seq_length
 pass
 
-class _UnslothGKDTrainer(SFTTrainer):
-    _tag_names = ["trl", "gkd"]
+class _UnslothIterativeSFTTrainer(Trainer):
+    """"""
+
+    _tag_names = ["trl", "iterative-sft"]
 
     def __init__(
         self,
-        model: Optional[Union[PreTrainedModel, nn.Module, str]] = None,
-        teacher_model: Union[PreTrainedModel, nn.Module, str] = None,
-        args: Optional[GKDConfig] = None,
-        data_collator: Optional[DataCollator] = None,  # type: ignore
-        train_dataset: Optional[Dataset] = None,
+        model: Union[str, PreTrainedModel],
+        args: Optional[Union[IterativeSFTConfig, TrainingArguments]] = None,
+        data_collator: Optional[DataCollator] = None,
         eval_dataset: Optional[Union[Dataset, dict[str, Dataset]]] = None,
         processing_class: Optional[
             Union[PreTrainedTokenizerBase, BaseImageProcessor, FeatureExtractionMixin, ProcessorMixin]
         ] = None,
-        compute_metrics: Optional[Callable[[EvalPrediction], dict]] = None,
-        callbacks: Optional[list[TrainerCallback]] = None,
-        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        optimizers: tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (
+            None,
+            None,
+        ),
         preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
-        peft_config: Optional["PeftConfig"] = None,
-        formatting_func: Optional[Callable] = None,
+        compute_metrics: Optional[Callable[[EvalLoopOutput], dict]] = None,
     ):
-        # Ensure Trainer does not drop non-signature columns used by the collator [e.g., "prompts"]
-        args.remove_unused_columns = False
-        # Respect a user-provided data_collator; otherwise, provide a ChatML collator that
-        if data_collator is None:
-            data_collator = DataCollatorForChatML(tokenizer=processing_class, max_length=args.max_length)
+        warnings.warn(
+            "The `IterativeSFTTrainer` is deprecated and will be removed in version 0.24.0. Please use the "
+            "`SFTTrainer`.",
+            FutureWarning,
+        )
 
-        # Ensure SFTTrainer does not pre-process the dataset when using a ChatML collator,
-        # so that raw conversational fields [e.g., "messages"] remain available to the collator.
-        if args.dataset_kwargs is None:
-            args.dataset_kwargs = {"skip_prepare_dataset": True}
-        else:
-            args.dataset_kwargs["skip_prepare_dataset"] = True
+        # Args
+        model_id = model if isinstance(model, str) else model.config._name_or_path
+        if args is None:
+            model_name = model_id.split("/")[-1]
+            args = IterativeSFTConfig(f"{model_name}-IterativeSFT")
+        elif isinstance(args, TrainingArguments) and not isinstance(args, IterativeSFTConfig):
+            dict_args = args.to_dict()
+            dict_args["hub_token"] = args.hub_token  # to_dict hides the hub_token
+            dict_args.pop("push_to_hub_token")
+            args = IterativeSFTConfig(**dict_args)
 
-        # Liger fused GKD loss [JSD]
-        self.use_liger_gkd_loss = False
-        if args.use_liger_kernel:
-            self.liger_jsd_loss = LigerFusedLinearJSDLoss(
-                beta=args.beta,
-                ignore_index=-100,
-                temperature=args.temperature,
-                compiled=False,
+        # Handle the tokenizer
+        if processing_class is None:
+            processing_class = AutoTokenizer.from_pretrained(model_id)
+
+        # Model
+        if args.model_init_kwargs is not None and not isinstance(model, str):
+            logger.warning(
+                "You passed model_init_kwargs to the `IterativeSFTConfig`, but your model is already instantiated. "
+                "The `model_init_kwargs` will be ignored."
             )
-            self.use_liger_gkd_loss = True
+        if isinstance(model, str):
+            model = self._create_model_from_path(model, args)
+
+        # PEFT configuration and model wrapping
+        if is_peft_available() and isinstance(model, PeftModel):
+            self.is_peft_model = True
+        else:
+            self.is_peft_model = False
+
+        self.processing_class = processing_class
+        self.is_encoder_decoder = getattr(model.config, "is_encoder_decoder", False)
+
+        if data_collator is None:
+            if self.is_encoder_decoder:
+                self.data_collator = DataCollatorForSeq2Seq(
+                    processing_class, label_pad_token_id=-100, pad_to_multiple_of=8
+                )
+            else:
+                self.data_collator = DataCollatorForLanguageModeling(self.processing_class, mlm=False)
+        else:
+            self.data_collator = data_collator
+
+        self.max_length = args.max_length
+        self.truncation_mode = args.truncation_mode
+        self.optimize_device_cache = args.optimize_device_cache
 
         super().__init__(
-            model,
+            model=model,
             args=args,
-            data_collator=data_collator,
-            train_dataset=train_dataset,
+            data_collator=self.data_collator,
             eval_dataset=eval_dataset,
             processing_class=processing_class,
             compute_metrics=compute_metrics,
-            callbacks=callbacks,
             optimizers=optimizers,
             preprocess_logits_for_metrics=preprocess_logits_for_metrics,
-            peft_config=peft_config,
-            formatting_func=formatting_func,
         )
 
-        if args.teacher_model_init_kwargs is None:
-            teacher_model_init_kwargs = {}
-        elif not isinstance(teacher_model, str):
-            raise ValueError(
-                "You passed teacher_model_init_kwargs to the GKDConfig, but your teacher_model is already instantiated."
-            )
-        else:
-            teacher_model_init_kwargs = args.teacher_model_init_kwargs
-            teacher_model_init_kwargs["torch_dtype"] = (
-                teacher_model_init_kwargs["torch_dtype"]
-                if teacher_model_init_kwargs["torch_dtype"] in ["auto", None]
-                else getattr(torch, teacher_model_init_kwargs["torch_dtype"])
-            )
+        # Add tags for models that have been loaded with the correct transformers version
+        if hasattr(self.model, "add_model_tags"):
+            self.model.add_model_tags(self._tag_names)
 
-        if isinstance(teacher_model, str):
-            teacher_model = AutoModelForCausalLM.from_pretrained(teacher_model, **teacher_model_init_kwargs)
+        self.create_optimizer_and_scheduler(self.args.max_steps)
 
-        # Disable dropout in the model
-        if args.disable_dropout:
-            disable_dropout_in_model(self.model)
-
-        if self.is_deepspeed_enabled:
-            self.teacher_model = prepare_deepspeed(teacher_model, self.accelerator)
-        else:
-            self.teacher_model = self.accelerator.prepare_model(teacher_model, evaluation_mode=True)
-
-        self.lmbda = args.lmbda
-        self.beta = args.beta
-        self.temperature = args.temperature
-        self.seq_kd = args.seq_kd
-
-        self.generation_config = GenerationConfig(
-            max_new_tokens=args.max_new_tokens,
-            temperature=args.temperature,
-            do_sample=True,
-            top_k=0,
-            use_cache=False if args.gradient_checkpointing else True,
-            pad_token_id=self.processing_class.pad_token_id,
+        # prepare model, optimizer and lr_scheduler
+        self.model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+            self.model, self.optimizer, self.lr_scheduler
         )
-        # Set custom EOS tokens if they are specified by the model's generation
-        # config. This is important for models with the Llama 3 chat template,
-        # which use special tokens <|eot_id|> and <|eom_id|> to mark the end of
-        # turns or messages.
-        if (
-            hasattr(self.model.generation_config, "eos_token_id")
-            and self.model.generation_config.eos_token_id is not None
-        ):
-            self.generation_config.eos_token_id = self.model.generation_config.eos_token_id
+
+        self.processing_class.truncation_side = "left" if self.truncation_mode == "keep_end" else "right"
+
+        if not hasattr(self, "accelerator"):
+            raise AttributeError(
+                "Your `Trainer` does not have an `accelerator` object. Consider upgrading `transformers`."
+            )
+
+        PPODecorators.optimize_device_cache = self.optimize_device_cache
+
+    def _create_model_from_path(self, model_path: str, args: IterativeSFTConfig) -> PreTrainedModel:
+        """Creates a model from a path or model identifier."""
+        model_init_kwargs = args.model_init_kwargs or {}
+        return AutoModelForCausalLM.from_pretrained(model_path, **model_init_kwargs)
+
+    def prepare_model_inputs(self, input_ids: torch.Tensor, attention_mask: torch.Tensor, labels: torch.Tensor):
+        if attention_mask is None:
+            attention_mask = [torch.ones_like(ids) for ids in input_ids]
+
+        if self.is_encoder_decoder:
+            input_data = self.data_collator(
+                [
+                    {"input_ids": ids, "attention_mask": att, "labels": lab}
+                    for ids, att, lab in zip(input_ids, attention_mask, labels)
+                ]
+            ).to(self.model.device)
+
+            input_data.pop("decoder_input_ids", None)  # This is directly computed inside the model
+
+            input_data["labels"][input_data["labels"] == self.processing_class.pad_token_id] = -100
+
+        else:
+            input_data = self.data_collator(
+                [{"input_ids": ids, "attention_mask": att} for ids, att in zip(input_ids, attention_mask)]
+            ).to(self.model.device)
+
+        # truncate in case the user has provided input_ids, attention_mask and labels
+        if self.max_length is not None:
+            if self.truncation_mode == "keep_start":
+                input_data = {k: v[: self.max_length] for k, v in input_data.items()}
+            elif self.truncation_mode == "keep_end":
+                input_data = {k: v[-self.max_length :] for k, v in input_data.items()}
+            else:
+                raise ValueError(f"Unknown truncation mode: {self.truncation_mode}")
+
+        return input_data
 
     @staticmethod
-    def generalized_jsd_loss(
-        student_logits, teacher_logits, labels=None, beta=0.5, temperature=1.0, reduction="batchmean"
+    def _step_safety_checker(
+        input_ids: list[torch.LongTensor],
+        attention_mask: list[torch.LongTensor],
+        labels: list[torch.LongTensor],
+        texts: list[str],
+        texts_labels: list[str],
     ):
         """
-        Compute the generalized Jensen-Shannon Divergence loss for knowledge distillation using F.kl_div. See Eq. (1)
-        of https://huggingface.co/papers/2306.13649 for the definition.
+        Check if the input data is valid for training.
 
         Args:
-            student_logits:
-                Tensor of shape (batch_size, sequence_length, vocab_size)
-            teacher_logits:
-                Tensor of shape (batch_size, sequence_length, vocab_size)
-            labels:
-                Tensor of shape (batch_size, sequence_length) with -100 for padding tokens to ignore when computing
-                loss
-            beta:
-                Interpolation coefficient between 0 and 1 (default: 0.5)
-            temperature:
-                Softmax temperature (default: 1.0)
-            reduction:
-                Specifies the reduction to apply to the output (default: 'batchmean')
+            input_ids (list[`torch.LongTensor`]):
+                List of tensors containing the input_ids
+            attention_mask (list[`torch.LongTensor`]):
+                List of tensors containing the attention_mask
+            labels (list[`torch.FloatTensor`]):
+                List of tensors containing the labels
+            texts (list[`str`]):
+                List of string containing the text input.
+            texts_labels (list[`str`]):
+                List of string containing the text labels.
 
         Returns:
-            loss: Scalar tensor with the generalized JSD loss
+            `tuple`: The input data.
         """
-
-        # Apply temperature scaling
-        student_logits = student_logits / temperature
-        teacher_logits = teacher_logits / temperature
-
-        # Compute log probabilities for student and probabilities for teacher
-        student_log_probs = F.log_softmax(student_logits, dim=-1)
-        teacher_log_probs = F.log_softmax(teacher_logits, dim=-1)
-
-        if beta == 0:
-            jsd = F.kl_div(student_log_probs, teacher_log_probs, reduction="none", log_target=True)
-        elif beta == 1:
-            jsd = F.kl_div(teacher_log_probs, student_log_probs, reduction="none", log_target=True)
-        else:
-            # Compute the log of the mixture distribution
-            # log(a + b) = log(exp(log(a)) + exp(log(b))) -> for mixture
-            beta = torch.tensor(beta, dtype=student_log_probs.dtype)
-            mixture_log_probs = torch.logsumexp(
-                torch.stack([student_log_probs + torch.log(1 - beta), teacher_log_probs + torch.log(beta)]),
-                dim=0,
-            )
-
-            # Compute KL divergences using F.kl_div
-            # PyTorch differs from the standard mathematical definition, so the order of the probability distributions is swapped compared to that defined in the paper.
-            kl_teacher = F.kl_div(mixture_log_probs, teacher_log_probs, reduction="none", log_target=True)
-            kl_student = F.kl_div(mixture_log_probs, student_log_probs, reduction="none", log_target=True)
-
-            # Compute the Generalized Jensen-Shannon Divergence
-            jsd = beta * kl_teacher + (1 - beta) * kl_student
-
-        # Masking
-        if labels is not None:
-            mask = labels != -100
-            jsd = jsd[mask]
-
-        # Apply reduction
-        if reduction == "batchmean":
-            return jsd.sum() / mask.sum() if labels is not None else jsd.sum() / (jsd.size(0) * jsd.size(1))
-        elif reduction == "sum":
-            return jsd.sum()
-        elif reduction == "mean":
-            return jsd.mean()
-        else:
-            return jsd
-
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        if self.use_liger_gkd_loss:
-            # Forward only through the base models (avoid lm_head to save memory)
-            unwrapped_student = self.accelerator.unwrap_model(model)
-            if hasattr(unwrapped_student, "get_decoder") and unwrapped_student.get_decoder() is not None:
-                base_student = unwrapped_student.get_decoder()
+        if texts is None:
+            if attention_mask is None:
+                for name, tensor_list in zip(["input_ids", "labels"], [input_ids, labels]):
+                    if not isinstance(tensor_list, list):
+                        raise ValueError(f"{name} must be a list of tensors - got {type(tensor_list)}")
+                    if not isinstance(tensor_list[0], torch.Tensor):
+                        raise ValueError(f"Elements in {name} must be tensors - got {type(tensor_list[0])}")
             else:
-                base_student = getattr(
-                    unwrapped_student, getattr(unwrapped_student, "base_model_prefix", "model"), unwrapped_student
-                )
-
-            student_outputs = base_student(
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                output_hidden_states=True,
-                use_cache=False,
-            )
-
-            self.teacher_model.eval()
-            unwrapped_teacher = self.accelerator.unwrap_model(self.teacher_model)
-            if hasattr(unwrapped_teacher, "get_decoder") and unwrapped_teacher.get_decoder() is not None:
-                base_teacher = unwrapped_teacher.get_decoder()
-            else:
-                base_teacher = getattr(
-                    unwrapped_teacher, getattr(unwrapped_teacher, "base_model_prefix", "model"), unwrapped_teacher
-                )
-            with torch.no_grad():
-                teacher_outputs = base_teacher(
-                    input_ids=inputs["input_ids"],
-                    attention_mask=inputs["attention_mask"],
-                    output_hidden_states=True,
-                    use_cache=False,
-                )
-
-            # hidden states (shifted)
-            student_hidden = student_outputs.last_hidden_state[:, :-1].contiguous()
-            teacher_hidden = teacher_outputs.last_hidden_state[:, :-1].contiguous()
-
-            # labels mask and labels (shifted)
-            labels_mask = inputs["labels"] != -100
-            masked_input_ids = torch.where(
-                labels_mask, inputs["input_ids"], torch.full_like(inputs["input_ids"], -100)
-            )
-            true_labels = masked_input_ids[:, 1:].contiguous()
-
-            # heads
-            student_head = unwrapped_student.get_output_embeddings()
-            teacher_head = unwrapped_teacher.get_output_embeddings()
-
-            # liger fused jsd loss
-            loss = self.liger_jsd_loss(
-                student_input=student_hidden,
-                student_weight=student_head.weight,
-                teacher_input=teacher_hidden,
-                teacher_weight=teacher_head.weight,
-                true_labels=true_labels,
-                student_bias=getattr(student_head, "bias", None),
-                teacher_bias=getattr(teacher_head, "bias", None),
-            )
+                for name, tensor_list in zip(
+                    ["input_ids", "attention_mask", "labels"], [input_ids, attention_mask, labels]
+                ):
+                    if not isinstance(tensor_list, list):
+                        raise ValueError(f"{name} must be a list of tensors - got {type(tensor_list)}")
+                    if not isinstance(tensor_list[0], torch.Tensor):
+                        raise ValueError(f"Elements in {name} must be tensors - got {type(tensor_list[0])}")
         else:
-            # compute student output
-            student_outputs = model(
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
+            if not isinstance(texts, list):
+                raise ValueError(f"'text' must be a list of strings - got {type(texts)}")
+            if not isinstance(texts[0], str):
+                raise ValueError(f"Elements in 'text' must be strings - got {type(texts[0])}")
+            if texts_labels is not None:
+                if not isinstance(texts_labels, list):
+                    raise ValueError(f"'text_labels' must be a list of strings - got {type(texts_labels)}")
+                if not isinstance(texts_labels[0], str):
+                    raise ValueError(f"Elements in 'text_labels' must be strings - got {type(texts_labels[0])}")
+
+        return input_ids, attention_mask, labels, texts, texts_labels
+
+    @PPODecorators.empty_device_cache()
+    def step(
+        self,
+        input_ids: Optional[list[torch.LongTensor]] = None,
+        attention_mask: Optional[list[torch.LongTensor]] = None,
+        labels: Optional[list[torch.LongTensor]] = None,
+        texts: Optional[list[str]] = None,
+        texts_labels: Optional[list[str]] = None,
+    ):
+        """
+        Run an optimisation step given a list of input_ids, attention_mask, and labels or a list of text and
+        text_labels.
+
+        Args:
+            input_ids (list[`torch.LongTensor`]):
+                List of tensors containing the input_ids (if not provided, text will be used)
+            attention_mask (list[`torch.LongTensor`], , *optional*):
+                List of tensors containing the attention_mask
+            labels (list[`torch.FloatTensor`], *optional*):
+                List of tensors containing the labels (if set to None, will default to input_ids)
+            texts (list[`str`], *optional*):
+                List of strings containing the text input (if not provided, input_ids will directly be used)
+            texts_labels (list[`str`], *optional*):
+                List of strings containing the text labels (if set to None, will default to text)
+
+        Returns:
+            `dict[str, Any]`: A summary of the training statistics
+        """
+        self.model.train()
+
+        if self.state.global_step == 0:
+            self.tr_loss = torch.tensor(0.0).to(self.args.device)
+            self._globalstep_last_logged = self.state.global_step
+
+        if input_ids is None and texts is None:
+            raise ValueError("Step should include `input_ids` or `texts` as keyword arguments.")
+        elif input_ids is not None and texts is not None:
+            logger.warning(
+                "Both `input_ids` and `texts` argument are provided. `input_ids` will be ignored. "
+                "Please provide only one of the two.",
             )
 
-            # compute teacher output in eval mode
-            self.teacher_model.eval()
-            with torch.no_grad():
-                teacher_outputs = self.teacher_model(
-                    input_ids=inputs["input_ids"],
-                    attention_mask=inputs["attention_mask"],
-                )
-
-            # slice the logits for the generated tokens using the inputs["prompts"] lengths
-            prompt_lengths = inputs["prompts"].shape[1]
-            shifted_student_logits = student_outputs.logits[:, prompt_lengths - 1 : -1, :]
-            shifted_teacher_logits = teacher_outputs.logits[:, prompt_lengths - 1 : -1, :]
-            shifted_labels = inputs["labels"][:, prompt_lengths:]
-
-            # compute loss
-            loss = self.generalized_jsd_loss(
-                student_logits=shifted_student_logits,
-                teacher_logits=shifted_teacher_logits,
-                labels=shifted_labels,
-                beta=self.beta,
+        if labels is None and texts_labels is None and self.is_encoder_decoder:
+            raise ValueError(
+                "No 'labels' or 'text_labels' are provided. When using an encoder-decoder architecture, 'labels' or 'text_labels' must be passed."
             )
 
-        # empty cache
-        empty_cache()
+        # Convert Column to list if not already
+        input_ids = input_ids[:] if input_ids is not None else None
+        attention_mask = attention_mask[:] if attention_mask is not None else None
+        labels = labels[:] if labels is not None else None
+        texts = texts[:] if texts is not None else None
+        texts_labels = texts_labels[:] if texts_labels is not None else None
 
-        # Return loss
-        return (loss, student_outputs) if return_outputs else loss
-
-    @staticmethod
-    def generate_on_policy_outputs(model, inputs, generation_config, pad_token_id=None):
-        # Generate output with respect to the prompt-only
-        generated_outputs = model.generate(
-            input_ids=inputs["prompts"],
-            attention_mask=inputs.get("prompt_attention_mask", None),
-            generation_config=generation_config,
-            return_dict_in_generate=True,
+        input_ids, attention_mask, labels, texts, texts_labels = self._step_safety_checker(
+            input_ids, attention_mask, labels, texts, texts_labels
         )
 
-        # Get the generated token IDs
-        generated_tokens = generated_outputs.sequences
-        # Calculate new attention mask
-        new_attention_mask = torch.ones_like(generated_tokens)
-        new_labels = generated_tokens.clone()
+        if texts is not None:
+            model_inputs = self.processing_class(
+                texts, max_length=self.max_length, truncation=True, padding=True, return_tensors="pt"
+            )
 
-        # If there's pad_token_id, set attention mask to 0 for padding tokens
-        if pad_token_id is not None:
-            new_labels[new_labels == pad_token_id] = -100
-            new_attention_mask[generated_tokens == pad_token_id] = 0
+            input_ids, attention_mask = model_inputs["input_ids"], model_inputs["attention_mask"]
 
-        return generated_tokens, new_attention_mask, new_labels
+        if texts_labels is not None:
+            labels = self.processing_class(
+                texts, max_length=self.max_length, truncation=True, padding=True, return_tensors="pt"
+            )["input_ids"]
 
-    def training_step(
-        self, model: nn.Module, inputs: dict[str, Union[torch.Tensor, Any]], num_items_in_batch: Optional[int] = None
-    ) -> torch.Tensor:
-        """
-        Perform a training step for the Generalized Knowledge Distillation (GKD) model.
+        if labels is None:
+            labels = input_ids
 
-        This method implements the on-policy learning approach described in the GKD paper. With probability
-        `self.lmbda`, it generates new responses using the student model, which are then used for training instead of
-        the original inputs.
-        """
-        if self.seq_kd:
-            with unwrap_model_for_generation(self.teacher_model, self.accelerator) as unwrapped_model:
-                new_input_ids, new_attention_mask, new_labels = self.generate_on_policy_outputs(
-                    unwrapped_model, inputs, self.generation_config, self.processing_class.pad_token_id
-                )
-            inputs["input_ids"] = new_input_ids
-            inputs["attention_mask"] = new_attention_mask
-            inputs["labels"] = new_labels
-        if random.random() <= self.lmbda:
-            with unwrap_model_for_generation(model, self.accelerator) as unwrapped_model:
-                new_input_ids, new_attention_mask, new_labels = self.generate_on_policy_outputs(
-                    unwrapped_model, inputs, self.generation_config, self.processing_class.pad_token_id
-                )
-            inputs["input_ids"] = new_input_ids
-            inputs["attention_mask"] = new_attention_mask
-            inputs["labels"] = new_labels
+        model_inputs = self.prepare_model_inputs(input_ids, attention_mask, labels)
 
-        loss = super().training_step(model, inputs, num_items_in_batch)
-        return loss
+        model_inputs_names = list(model_inputs.keys())
+
+        batch_dict = {}
+        batch_dict.update(model_inputs)
+
+        def collator(data):
+            return_dict = dict()
+            for key in data[0]:
+                if key in ["input_ids", "attention_mask", "labels"]:
+                    return_dict[key] = torch.stack([d[key] for d in data]).to(self.model.device)
+            return return_dict
+
+        batch_data = Dataset.from_dict(batch_dict)
+        batch_data.set_format("torch")
+
+        step_dataloader = DataLoader(
+            batch_data,
+            batch_size=self.args.per_device_train_batch_size,
+            shuffle=True,
+            collate_fn=collator,
+        )
+
+        for _, batch in enumerate(step_dataloader):
+            with self.accelerator.accumulate(self.model):
+                model_inputs = {k: batch[k] for k in model_inputs_names}
+                loss = self.compute_loss(self.model, model_inputs)
+
+                if self.args.n_gpu > 1:
+                    loss = loss.mean()
+
+                tr_loss_step = loss.detach()
+
+                self.accelerator.backward(loss)
+
+                if self.accelerator.sync_gradients and self.args.max_grad_norm is not None:
+                    self.accelerator.clip_grad_norm_(
+                        self.model.parameters(),
+                        self.args.max_grad_norm,
+                    )
+
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+                if self.lr_scheduler is not None:
+                    self.lr_scheduler.step()
+
+                self.state.global_step += 1
+
+                # update stats etc
+                self.tr_loss += tr_loss_step
+
+                self._maybe_log_save_evaluate()
+
+    def _maybe_log_save_evaluate(self):
+        # check if eval is required
+        if self.args.eval_steps is not None:
+            if self.state.global_step % self.args.eval_steps == 0 and self.state.global_step != 0:
+                self.evaluate(self.eval_dataset)
+
+        # check if logging is required
+        if self.args.logging_steps is not None:
+            if self.state.global_step % self.args.logging_steps == 0 and self.state.global_step != 0:
+                logs: dict[str, float] = {}
+
+                tr_loss_scalar = self._nested_gather(self.tr_loss).mean().item()
+
+                # reset tr_loss to zero
+                self.tr_loss -= self.tr_loss
+
+                logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
+                logs["learning_rate"] = self._get_learning_rate()
+
+                self._globalstep_last_logged = self.state.global_step
+
+                self.log(logs)
+
+    # Ensure the model card is saved along with the checkpoint
+    def _save_checkpoint(self, model, trial):
+        if self.args.hub_model_id is None:
+            model_name = Path(self.args.output_dir).name
+        else:
+            model_name = self.args.hub_model_id.split("/")[-1]
+        self.create_model_card(model_name=model_name)
+        super()._save_checkpoint(model, trial)
 
     def create_model_card(
         self,
@@ -1072,17 +1045,6 @@ class _UnslothGKDTrainer(SFTTrainer):
 
         tags.update(self._tag_names)
 
-        # docstyle-ignore
-        citation = textwrap.dedent("""\
-        @inproceedings{agarwal2024on-policy,
-            title        = {{On-Policy Distillation of Language Models: Learning from Self-Generated Mistakes}},
-            author       = {Rishabh Agarwal and Nino Vieillard and Yongchao Zhou and Piotr Stanczyk and Sabela Ramos Garea and Matthieu Geist and Olivier Bachem},
-            year         = 2024,
-            booktitle    = {The Twelfth International Conference on Learning Representations, {ICLR} 2024, Vienna, Austria, May 7-11, 2024},
-            publisher    = {OpenReview.net},
-            url          = {https://openreview.net/forum?id=3zKtaqxLhW},
-        }""")
-
         model_card = generate_model_card(
             base_model=base_model,
             model_name=model_name,
@@ -1091,34 +1053,64 @@ class _UnslothGKDTrainer(SFTTrainer):
             tags=tags,
             wandb_url=wandb.run.url if is_wandb_available() and wandb.run is not None else None,
             comet_url=get_comet_experiment_url(),
-            trainer_name="GKD",
-            trainer_citation=citation,
-            paper_title="On-Policy Distillation of Language Models: Learning from Self-Generated Mistakes",
-            paper_id="2306.13649",
+            trainer_name="Iterative SFT",
         )
 
         model_card.save(os.path.join(self.args.output_dir, "README.md"))
-class UnslothGKDTrainer(_UnslothGKDTrainer):
+class UnslothIterativeSFTTrainer(_UnslothIterativeSFTTrainer):
     """
+    
+    The IterativeSFTTrainer can be used to finetune models with methods that requires some steps between optimization.
+
+    <Tip warning={true}>
+
+    The [`IterativeSFTTrainer`] is deprecated and will be removed in version 0.24.0. Please use the [`SFTTrainer`].
+
+    </Tip>
+
+    Args:
+        model (`Union[str, PreTrainedModel]`):
+            Model to be trained. Can be either:
+
+            - A string, being the *model id* of a pretrained model hosted inside a model repo on huggingface.co, or a
+              path to a *directory* containing model weights saved using
+              [`~transformers.PreTrainedModel.save_pretrained`], e.g., `'./my_model_directory/'`. The model is loaded
+              using [`~transformers.AutoModelForCausalLM.from_pretrained`] with the keyword arguments in
+              `args.model_init_kwargs`.
+            - A [`~transformers.PreTrainedModel`] object. Only causal language models are supported.
+        args ([`IterativeSFTConfig`], *optional*, defaults to `None`):
+            Configuration for this trainer. If `None`, a default configuration is used.
+        data_collator (`DataCollator`, *optional*):
+            Function to use to form a batch from a list of elements of the processed `train_dataset` or `eval_dataset`.
+            Will default to [`~transformers.default_data_collator`] if no `processing_class` is provided, an instance
+            of [`~transformers.DataCollatorWithPadding`] otherwise if the processing_class is a feature extractor or
+            tokenizer.
+        eval_dataset (`datasets.Dataset`):
+            The dataset to use for evaluation.
+        processing_class ([`~transformers.PreTrainedTokenizerBase`], [`~transformers.BaseImageProcessor`], [`~transformers.FeatureExtractionMixin`] or [`~transformers.ProcessorMixin`], *optional*, defaults to `None`):
+            Processing class used to process the data. If `None`, the processing class is loaded from the model's name
+            with [`~transformers.AutoTokenizer.from_pretrained`].
+        optimizers (`tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`):
+            The optimizer and scheduler to use for training.
+        preprocess_logits_for_metrics (`Callable[[torch.Tensor, torch.Tensor], torch.Tensor]`):
+            The function to use to preprocess the logits before computing the metrics.
+        compute_metrics (`Callable[[EvalPrediction], dict]`, *optional*):
+            The function to use to compute the metrics. Must take a `EvalPrediction` and return a dictionary string to
+            metric values.
     
     """
     def __init__(
         self,
-        model = None,
-        teacher_model = None,
+        model,
         args = None,
         data_collator = None,
-        train_dataset = None,
         eval_dataset = None,
         processing_class = None,
-        compute_metrics = None,
-        callbacks = None,
         preprocess_logits_for_metrics = None,
-        peft_config = None,
-        formatting_func = None,
+        compute_metrics = None,
         **kwargs
     ):
-        if args is None: args = UnslothGKDConfig()
+        if args is None: args = UnslothIterativeSFTConfig()
         use_bf16 = getattr(args, 'bf16', False)
         if type(use_bf16) is not bool: use_bf16 = False
         use_fp16 = getattr(args, 'fp16', False)
@@ -1210,43 +1202,10 @@ class UnslothGKDTrainer(_UnslothGKDTrainer):
         if 'processing_class' in locals():
             if hasattr(processing_class, 'padding_side'): processing_class.padding_side = 'right'
             if hasattr(processing_class, 'tokenizer') and hasattr(processing_class.tokenizer, 'padding_side'): processing_class.tokenizer.padding_side = 'right'
-        __tokenizer = processing_class if 'processing_class' in locals() else tokenizer
-        from unsloth_zoo.vision_utils import UnslothVisionDataCollator
-        if not isinstance(data_collator, UnslothVisionDataCollator):
-            if isinstance(data_collator, DataCollatorForSeq2Seq) and 'labels' not in train_dataset.column_names:
-                data_collator = TransformersDataCollatorForLanguageModeling(
-                    __tokenizer,
-                    mlm = False,
-                    mlm_probability = 0.0,
-                    pad_to_multiple_of = getattr(args, 'pad_to_multiple_of', None),
-                )
-            elif isinstance(data_collator, TransformersDataCollatorForLanguageModeling) and 'labels' in train_dataset.column_names:
-                data_collator = DataCollatorForSeq2Seq(
-                    __tokenizer,
-                    pad_to_multiple_of = getattr(args, 'pad_to_multiple_of', None),
-                )
-        else:
-            if hasattr(args, 'remove_unused_columns'): args.remove_unused_columns = False
-            if hasattr(args, 'dataset_text_field'): args.dataset_text_field = ''
-            if hasattr(args, 'dataset_kwargs'): args.dataset_kwargs = {'skip_prepare_dataset': True}
-        if not isinstance(data_collator, UnslothVisionDataCollator):
-            if not hasattr(__tokenizer, 'pad') and hasattr(__tokenizer, 'tokenizer'):
-                if isinstance(data_collator, DataCollatorForSeq2Seq):
-                    data_collator = DataCollatorForSeq2Seq(
-                        __tokenizer.tokenizer,
-                        pad_to_multiple_of = getattr(args, 'pad_to_multiple_of', None),
-                    )
-                else:
-                    data_collator = TransformersDataCollatorForLanguageModeling(
-                        __tokenizer.tokenizer,
-                        mlm = False,
-                        mlm_probability = 0.0,
-                        pad_to_multiple_of = getattr(args, 'pad_to_multiple_of', None),
-                    )
         other_metrics = []
         
         from unsloth_zoo.logging_utils import PatchRLStatistics
-        PatchRLStatistics('gkd_trainer', other_metrics)
+        PatchRLStatistics('iterative_sft_trainer', other_metrics)
         
         # [TODO] Fix up DataParallel multiplying batch sizes
         # [TODO] DDP works, but DP seems to not work? [TODO]
@@ -1257,17 +1216,12 @@ class UnslothGKDTrainer(_UnslothGKDTrainer):
             model.for_training(use_gradient_checkpointing=getattr(args, 'gradient_checkpointing', True))
         super().__init__(
             model = model,
-            teacher_model = teacher_model,
             args = args,
             data_collator = data_collator,
-            train_dataset = train_dataset,
             eval_dataset = eval_dataset,
             processing_class = processing_class,
-            compute_metrics = compute_metrics,
-            callbacks = callbacks,
             preprocess_logits_for_metrics = preprocess_logits_for_metrics,
-            peft_config = peft_config,
-            formatting_func = formatting_func,**kwargs)
+            compute_metrics = compute_metrics,**kwargs)
         if "model" in locals() and hasattr(model, "for_inference"):
             model.for_inference()
         if hasattr(self, 'neftune_hook_handle'):
@@ -1295,3 +1249,13 @@ class UnslothGKDTrainer(_UnslothGKDTrainer):
         pass
         
 pass
+
+
+if hasattr(logger, "addFilter"):
+    import logging
+    class HideLoggingMessage(logging.Filter):
+        def __init__(self, text): self.text = text
+        def filter(self, x): return not (self.text in x.getMessage())
+    pass
+    logger.addFilter(HideLoggingMessage("`use_cache=True`"))
+

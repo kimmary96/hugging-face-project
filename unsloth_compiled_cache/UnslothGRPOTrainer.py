@@ -1,8 +1,8 @@
 """
 2026.1.3
 2026.1.3
-4.57.3
-0.24.0
+4.56.2
+0.22.2
 __UNSLOTH_VERSIONING__
 """
 
@@ -27,7 +27,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 from typing import Any, List, Optional, Tuple, Union, Dict, Set, Callable
-from trl.trainer.grpo_trainer import (Any, AutoConfig, AutoModelForSequenceClassification, AutoProcessor, AutoTokenizer, BaseTrainer, DataLoader, Dataset, FSDP, GRPOConfig, GRPOTrainer, GenerationConfig, IterableDataset, Optional, Path, PeftConfig, PreTrainedModel, PreTrainedTokenizerBase, ProcessorMixin, RepeatSampler, RewardFunc, Sampler, SyncRefModelCallback, TrainerCallback, Union, VLLMClient, _ForwardRedirection, apply_chat_template, broadcast_object_list, datasets, defaultdict, deque, disable_dropout_in_model, ensure_master_addr_port, gather, gather_object, identity, inspect, is_conversational, is_datasets_available, is_flash_attn_2_available, is_liger_kernel_available, is_peft_model, is_rich_available, is_vllm_available, logger, logging, maybe_apply_chat_template, nanmax, nanmin, nanstd, nn, nullcontext, os, pad, partial, prepare_deepspeed, prepare_fsdp, prepare_multimodal_messages, prepare_peft_model, print_prompt_completions_sample, profiling_context, profiling_decorator, seed_worker, selective_log_softmax, set_seed, shuffle_sequence_dict, split_pixel_values_by_grid, split_tensor_dict, textwrap, torch, transformers, unsplit_pixel_values_by_grid, unwrap_model_for_generation, Any, Union, gather, gather_object, is_conversational, logging, nanmax, nanmin, nanstd, os, pad, torch, FSDP, Optional, apply_chat_template, broadcast_object_list, gather, gather_object, is_flash_attn_2_available, maybe_apply_chat_template, nullcontext, os, pad, prepare_multimodal_messages, profiling_context, torch, transformers, unwrap_model_for_generation, os, pad, selective_log_softmax, torch, transformers, Any, Union, profiling_decorator, shuffle_sequence_dict, split_pixel_values_by_grid, split_tensor_dict, torch, unsplit_pixel_values_by_grid, Optional, PreTrainedModel, logger, os, torch, FSDP, nn, os, FSDP, nn, torch, GRPOTrainer, gather, os, pad, torch)
+from trl.trainer.grpo_trainer import (Any, AutoConfig, AutoModelForSequenceClassification, AutoProcessor, AutoTokenizer, DataLoader, Dataset, FSDP, GRPOConfig, GRPOTrainer, GenerationConfig, IterableDataset, Optional, Path, PeftConfig, PreTrainedModel, PreTrainedTokenizerBase, ProcessorMixin, RepeatSampler, RewardFunc, Sampler, SyncRefModelCallback, Trainer, TrainerCallback, Union, VLLMClient, _ForwardRedirection, apply_chat_template, broadcast_object_list, copy, datasets, defaultdict, deque, disable_dropout_in_model, gather, gather_object, generate_model_card, get_comet_experiment_url, identity, inspect, is_conversational, is_datasets_available, is_flash_attn_2_available, is_liger_kernel_available, is_peft_model, is_rich_available, is_vllm_available, is_wandb_available, logger, logging, maybe_apply_chat_template, nanmax, nanmin, nanstd, nn, nullcontext, os, pad, partial, prepare_deepspeed, prepare_fsdp, prepare_multimodal_messages, prepare_peft_model, print_prompt_completions_sample, profiling_context, profiling_decorator, re, seed_worker, selective_log_softmax, set_seed, shuffle_sequence_dict, split_pixel_values_by_grid, split_tensor_dict, textwrap, torch, transformers, truncate_with_protected_tokens, unsplit_pixel_values_by_grid, unwrap_model_for_generation, Any, FSDP, Union, apply_chat_template, broadcast_object_list, copy, gather, gather_object, is_conversational, is_flash_attn_2_available, logging, maybe_apply_chat_template, nanstd, nullcontext, os, pad, prepare_multimodal_messages, profiling_context, re, torch, transformers, truncate_with_protected_tokens, unwrap_model_for_generation, os, pad, re, selective_log_softmax, torch, transformers, re, Any, Union, profiling_decorator, re, shuffle_sequence_dict, split_pixel_values_by_grid, split_tensor_dict, torch, unsplit_pixel_values_by_grid, Optional, PreTrainedModel, Trainer, logger, os, re, torch, FSDP, nn, os, re, FSDP, nn, re, torch, GRPOTrainer, Trainer, gather, os, pad, re, torch)
 
 
 import os
@@ -1119,7 +1119,7 @@ class UnslothGRPOConfig(GRPOConfig):
     Parameters:
         > Parameters that control the model and reference model
 
-        model_init_kwargs (`str`, `dict[str, Any]`, *optional*):
+        model_init_kwargs (`str`, `dict[str, Any]` or `None`, *optional*, defaults to `None`):
             Keyword arguments for [`~transformers.AutoModelForCausalLM.from_pretrained`], used when the `model`
             argument of the [`GRPOTrainer`] is provided as a string.
         disable_dropout (`bool`, *optional*, defaults to `False`):
@@ -1148,11 +1148,11 @@ class UnslothGRPOConfig(GRPOConfig):
 
         > Parameters that control generation
 
-        generation_batch_size: (`int`, *optional*):
+        generation_batch_size: (`int` or `None`, *optional*, defaults to `None`):
             Batch size to use for generation. If `None`, it defaults to the effective training batch size:
             `per_device_train_batch_size * num_processes * steps_per_generation`. In other words, there is one
             generation batch processed per optimization step. Mutually exclusive with `steps_per_generation`.
-        steps_per_generation: (`int`, *optional*):
+        steps_per_generation: (`int` or `None`, *optional*, defaults to `None`):
             Number of steps per generation. If `None`, it defaults to `gradient_accumulation_steps`. Mutually exclusive
             with `generation_batch_size`.
         temperature (`float`, defaults to `1.0`):
@@ -1160,10 +1160,10 @@ class UnslothGRPOConfig(GRPOConfig):
         top_p (`float`, *optional*, defaults to `1.0`):
             Float that controls the cumulative probability of the top tokens to consider. Must be in (0, 1]. Set to
             `1.0` to consider all tokens.
-        top_k (`int`, *optional*):
+        top_k (`int` or `None`, *optional*, defaults to `None`):
             Number of highest probability vocabulary tokens to keep for top-k-filtering. If `None`, top-k-filtering is
             disabled and all tokens are considered.
-        min_p (`float`, *optional*):
+        min_p (`float` or `None`, *optional*, defaults to `None`):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
             value between `0.0` and `1.0`. Typical values are in the `0.01-0.2` range.
         repetition_penalty (`float`, *optional*, defaults to `1.0`):
@@ -1174,13 +1174,13 @@ class UnslothGRPOConfig(GRPOConfig):
             Whether to use the `transformers` paged implementation for generation. If set to `True`, the `transformers`
             paged implementation will be used for generation instead of the default padded implementation. This
             parameter is only effective when `use_vllm` is set to `False`.
-        cache_implementation (`str`, *optional*):
+        cache_implementation (`str` or `None`, *optional*, defaults to `None`):
             Implementation of the cache method for faster generation when `use_vllm` is set to `False`.
-        generation_kwargs (`dict[str, Any]`, *optional*):
-            Additional keyword arguments to pass to [`~transformers.GenerationConfig`] (if using transformers) or
-            `SamplingParams` (if using vLLM) when sampling completions. This can be used to further customize the
-            generation behavior, such as setting `suppress_tokens`, `num_beams`, etc. If it contains keys that conflict
-            with the other generation parameters (like `min_p`, `top_p`, etc.), they will override them.
+        generation_kwargs (`dict[str, Any]` or `None`, *optional*, defaults to `None`):
+            Additional keyword arguments to pass to `GenerationConfig` (if using transformers) or `SamplingParams` (if
+            using vLLM) when sampling completions. This can be used to further customize the generation behavior, such
+            as setting `suppress_tokens`, `num_beams`, etc. If it contains keys that conflict with the other generation
+            parameters (like `min_p`, `top_p`, etc.), they will override them.
 
         > Parameters that control generation acceleration powered by vLLM
 
@@ -1195,16 +1195,12 @@ class UnslothGRPOConfig(GRPOConfig):
               server is running (start with `trl vllm-serve`).
             - `"colocate"`: vLLM will run in the same process and share the training GPUs. This avoids the need for a
               separate server but may cause resource contention with training.
-        vllm_model_impl (`str`, *optional*, defaults to `"vllm"`):
-            Model implementation to use for vLLM. Must be one of `"transformers"` or `"vllm"`. `"transformers"`: Use
-            the `transformers` backend for model implementation. `"vllm"`: Use the `vllm` library for model
-            implementation.
-        vllm_guided_decoding_regex (`str`, *optional*):
+        vllm_guided_decoding_regex (`str` or `None`, *optional*, defaults to `None`):
             Regex for vLLM guided decoding. If `None` (default), guided decoding is disabled.
 
         > Parameters that control the vLLM server (only used when `vllm_mode` is `"server"`)
 
-        vllm_server_base_url (`str`, *optional*):
+        vllm_server_base_url (`str` or `None`, *optional*, defaults to `None`):
             Base URL for the vLLM server (e.g., `"http://localhost:8000"`). If provided, `vllm_server_host` and
             `vllm_server_port` are ignored.
         vllm_server_host (`str`, *optional*, defaults to `"0.0.0.0"`):
@@ -1225,9 +1221,10 @@ class UnslothGRPOConfig(GRPOConfig):
             Control the tensor parallel size for vLLM. This setting only applies when `vllm_mode` is set to
             `"colocate"`. If you are using `vllm_mode="server"`, this parameter must be passed separately when
             launching the vLLM server via the `--vllm_tensor_parallel_size` flag.
-        vllm_enable_sleep_mode (`bool`, *optional*, defaults to `False`):
-            Whether to enable sleep mode for vLLM. If `True`, vLLM will sleep during the optimization step and woken
-            for weight sync and generation.
+        vllm_model_impl (`str`, *optional*, defaults to `"vllm"`):
+            Model implementation to use for vLLM. Must be one of `"transformers"` or `"vllm"`. `"transformers"`: Use
+            the `transformers` backend for model implementation. `"vllm"`: Use the `vllm` library for model
+            implementation.
 
         > Parameters that control the training
 
@@ -1238,11 +1235,11 @@ class UnslothGRPOConfig(GRPOConfig):
             Number of iterations per batch (denoted as μ in the algorithm).
         epsilon (`float`, *optional*, defaults to `0.2`):
             Epsilon value for clipping.
-        delta (`float`, *optional*):
+        delta (`float` or `None`, *optional*, defaults to `None`):
             Enables the upper clipping bound in two-sided GRPO loss when set to a float. If `None` (default), standard
             GRPO clipping is used. Recommended to be greater than `1 + ε` when enabled. This method is introduced in
             the [INTELLECT-2 tech report](https://huggingface.co/papers/2505.07291).
-        epsilon_high (`float`, *optional*):
+        epsilon_high (`float` or `None`, *optional*, defaults to `None`):
             Upper-bound epsilon value for clipping. If not specified, it defaults to the same value as the lower-bound
             specified in argument `epsilon`. Paper [DAPO](https://huggingface.co/papers/2503.14476) recommends `0.28`.
         importance_sampling_level (`str`, *optional*, defaults to `"token"`):
@@ -1251,7 +1248,7 @@ class UnslothGRPOConfig(GRPOConfig):
             log-probability ratios across valid tokens to produce a single ratio per sequence. The [GSPO
             paper](https://huggingface.co/papers/2507.18071) shows that sequence-level sampling often yields more
             stable training and better alignment with sequence-level rewards.
-        reward_weights (`list[float]`, *optional*):
+        reward_weights (`list[float]` or `None`, *optional*, defaults to `None`):
             Weights for each reward function. Must match the number of reward functions. If `None`, all rewards are
             weighted equally with weight `1.0`.
         scale_rewards (`str` or `bool`, *optional*, defaults to `"group"`):
@@ -1305,22 +1302,13 @@ class UnslothGRPOConfig(GRPOConfig):
             `mask_truncated_completions=True`, only tokens from non-truncated completions are considered.
         use_liger_loss (`bool`, *optional*, defaults to `False`):
             Whether to use the Liger GRPO loss.
-        vllm_importance_sampling_correction (`bool`, *optional*, defaults to `True`):
-            Whether to apply Truncated Importance Sampling (TIS) between vLLM completion logprobs and recomputed
-            logprobs. [Your Efficient RL Framework Secretly Brings You Off-Policy RL
-            Training](https://fengyao.notion.site/off-policy-rl) highlights that using a separate generation framework
-            (such as vLLM) can introduce off-policy effects due to subtle implementation differences between generation
-            and training backends. TIS is proposed as a remedy for this issue.
-        vllm_importance_sampling_cap (`float`, *optional*, defaults to `2.0`):
-            Truncation parameter C for Truncated Importance Sampling (TIS). This sets an upper bound on the importance
-            sampling ratio, improving training stability.
 
         > Parameters that control the logging
 
         log_completions (`bool`, *optional*, defaults to `False`):
             Whether to log a sample of (prompt, completion) pairs every `logging_steps` steps. If `rich` is installed,
             it prints the sample. If `wandb` logging is enabled, it logs it to `wandb`.
-        num_completions_to_print (`int`, *optional*):
+        num_completions_to_print (`int` or `None`, *optional*, defaults to `None`):
             Number of completions to print with `rich`. If `None`, all completions are logged.
         wandb_log_unique_prompts (`bool`, *optional*, defaults to `False`):
             Whether to log unique prompts in wandb. If `True`, only unique prompts are logged. If `False`, all prompts
@@ -1393,6 +1381,7 @@ class UnslothGRPOConfig(GRPOConfig):
         seed = 3407,
         data_seed = 3407,
         jit_mode_eval = False,
+        use_ipex = False,
         bf16 = False,
         fp16 = False,
         fp16_opt_level = 'O1',
@@ -1418,7 +1407,7 @@ class UnslothGRPOConfig(GRPOConfig):
         metric_for_best_model = None,
         greater_is_better = None,
         ignore_data_skip = False,
-        fsdp = None,
+        fsdp = '',
         fsdp_min_num_params = 0,
         fsdp_config = None,
         fsdp_transformer_layer_cls_to_wrap = None,
@@ -1432,8 +1421,6 @@ class UnslothGRPOConfig(GRPOConfig):
         group_by_length = False,
         length_column_name = 'length',
         report_to = 'none',
-        project = 'huggingface',
-        trackio_space_id = 'trackio',
         ddp_find_unused_parameters = None,
         ddp_bucket_cap_mb = None,
         ddp_broadcast_buffers = None,
@@ -1494,11 +1481,10 @@ class UnslothGRPOConfig(GRPOConfig):
         use_transformers_paged = False,
         cache_implementation = None,
         use_vllm = False,
+        vllm_server_base_url = None,
         vllm_mode = 'colocate',
         vllm_model_impl = 'vllm',
-        vllm_enable_sleep_mode = False,
         vllm_guided_decoding_regex = None,
-        vllm_server_base_url = None,
         vllm_server_host = '0.0.0.0',
         vllm_server_port = 8000,
         vllm_server_timeout = 240.0,
@@ -1519,8 +1505,6 @@ class UnslothGRPOConfig(GRPOConfig):
         ref_model_sync_steps = 512,
         top_entropy_quantile = 1.0,
         use_liger_loss = False,
-        vllm_importance_sampling_correction = False,
-        vllm_importance_sampling_cap = 2.0,
         log_completions = False,
         num_completions_to_print = None,
         wandb_log_unique_prompts = False,
@@ -1617,6 +1601,7 @@ class UnslothGRPOConfig(GRPOConfig):
             seed = seed,
             data_seed = data_seed,
             jit_mode_eval = jit_mode_eval,
+            use_ipex = use_ipex,
             bf16 = bf16,
             fp16 = fp16,
             fp16_opt_level = fp16_opt_level,
@@ -1656,8 +1641,6 @@ class UnslothGRPOConfig(GRPOConfig):
             group_by_length = group_by_length,
             length_column_name = length_column_name,
             report_to = report_to,
-            project = project,
-            trackio_space_id = trackio_space_id,
             ddp_find_unused_parameters = ddp_find_unused_parameters,
             ddp_bucket_cap_mb = ddp_bucket_cap_mb,
             ddp_broadcast_buffers = ddp_broadcast_buffers,
@@ -1718,11 +1701,10 @@ class UnslothGRPOConfig(GRPOConfig):
             use_transformers_paged = use_transformers_paged,
             cache_implementation = cache_implementation,
             use_vllm = use_vllm,
+            vllm_server_base_url = vllm_server_base_url,
             vllm_mode = vllm_mode,
             vllm_model_impl = vllm_model_impl,
-            vllm_enable_sleep_mode = vllm_enable_sleep_mode,
             vllm_guided_decoding_regex = vllm_guided_decoding_regex,
-            vllm_server_base_url = vllm_server_base_url,
             vllm_server_host = vllm_server_host,
             vllm_server_port = vllm_server_port,
             vllm_server_timeout = vllm_server_timeout,
@@ -1743,8 +1725,6 @@ class UnslothGRPOConfig(GRPOConfig):
             ref_model_sync_steps = ref_model_sync_steps,
             top_entropy_quantile = top_entropy_quantile,
             use_liger_loss = use_liger_loss,
-            vllm_importance_sampling_correction = vllm_importance_sampling_correction,
-            vllm_importance_sampling_cap = vllm_importance_sampling_cap,
             log_completions = log_completions,
             num_completions_to_print = num_completions_to_print,
             wandb_log_unique_prompts = wandb_log_unique_prompts,**kwargs)
@@ -1762,24 +1742,10 @@ class UnslothGRPOConfig(GRPOConfig):
         
 pass
 
-class _UnslothGRPOTrainer(BaseTrainer):
+class _UnslothGRPOTrainer(Trainer):
     """"""
 
     _tag_names = ["trl", "grpo"]
-    _name = "GRPO"
-    _paper = {
-        "title": "DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models",
-        "id": "2402.03300",
-        # docstyle-ignore
-        "citation": textwrap.dedent("""\
-            @article{shao2024deepseekmath,
-                title        = {{DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models}},
-                author       = {Zhihong Shao and Peiyi Wang and Qihao Zhu and Runxin Xu and Junxiao Song and Mingchuan Zhang and Y. K. Li and Y. Wu and Daya Guo},
-                year         = 2024,
-                eprint       = {arXiv:2402.03300},
-            }
-            """),
-    }
 
     def __init__(
         self,
@@ -1799,8 +1765,6 @@ class _UnslothGRPOTrainer(BaseTrainer):
             if (getattr(args, 'use_vllm', False) == False):
                 args.use_vllm = True
             args.vllm_mode='colocate'
-            if os.environ.get('UNSLOTH_VLLM_STANDBY', '0') == '1':
-                args.vllm_enable_sleep_mode=True
         # Args
         if args is None:
             model_name = model if isinstance(model, str) else model.config._name_or_path
@@ -1812,16 +1776,16 @@ class _UnslothGRPOTrainer(BaseTrainer):
         model_init_kwargs = args.model_init_kwargs or {}
         if isinstance(model, str):
             model_id = model
-            dtype = model_init_kwargs.get("dtype")
-            if isinstance(dtype, torch.dtype) or dtype == "auto" or dtype is None:
-                pass  # dtype is already a torch.dtype or "auto" or None
-            elif isinstance(dtype, str):  # it's a str, but not "auto"
-                dtype = getattr(torch, dtype)
-                model_init_kwargs["dtype"] = dtype
+            torch_dtype = model_init_kwargs.get("torch_dtype")
+            if isinstance(torch_dtype, torch.dtype) or torch_dtype == "auto" or torch_dtype is None:
+                pass  # torch_dtype is already a torch.dtype or "auto" or None
+            elif isinstance(torch_dtype, str):  # it's a str, but not "auto"
+                torch_dtype = getattr(torch, torch_dtype)
+                model_init_kwargs["torch_dtype"] = torch_dtype
             else:
                 raise ValueError(
-                    "Invalid `dtype` passed to `GRPOConfig`. Expected either 'auto' or a string representing "
-                    f"a `torch.dtype` (e.g., 'float32'), but got {dtype}."
+                    "Invalid `torch_dtype` passed to `GRPOConfig`. Expected either 'auto' or a string representing "
+                    f"a `torch.dtype` (e.g., 'float32'), but got {torch_dtype}."
                 )
             # Disable caching if gradient checkpointing is enabled [not supported]
             config = AutoConfig.from_pretrained(model_id)
@@ -1848,7 +1812,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
 
         # Processing class
         if processing_class is None:
-            processing_class = AutoProcessor.from_pretrained(model.config._name_or_path, truncation_side="left")
+            processing_class = AutoProcessor.from_pretrained(model.config._name_or_path)
 
         # Handle pad token for processors or tokenizers
         if isinstance(processing_class, ProcessorMixin):
@@ -1864,6 +1828,10 @@ class _UnslothGRPOTrainer(BaseTrainer):
         self.pad_token = tokenizer.pad_token
         self.pad_token_id = tokenizer.pad_token_id
         self.eos_token_id = tokenizer.eos_token_id
+        self.image_token = getattr(processing_class, "image_token", None)
+        self.image_token_id = getattr(processing_class, "image_token_id", None)
+        self.vision_start_token_id = getattr(model.config, "vision_start_token_id", None)
+        self.vision_end_token_id = getattr(model.config, "vision_end_token_id", None)
 
         # Reward functions
         if not isinstance(reward_funcs, list):
@@ -1929,8 +1897,6 @@ class _UnslothGRPOTrainer(BaseTrainer):
         self.vllm_mode = args.vllm_mode
         self.vllm_gpu_memory_utilization = args.vllm_gpu_memory_utilization  # only applies to colocation mode
         self.vllm_tensor_parallel_size = args.vllm_tensor_parallel_size  # only applies to colocation mode
-        self.vllm_importance_sampling_correction = args.vllm_importance_sampling_correction
-        self.vllm_importance_sampling_cap = args.vllm_importance_sampling_cap
         self.use_liger_loss = args.use_liger_loss
         self.loss_type = args.loss_type
         self.scale_rewards = args.scale_rewards
@@ -2045,7 +2011,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
         self.num_completions_to_print = args.num_completions_to_print
         # Keep logs sized to the generation batch to record only outputs from the latest model update.
         self._logs = {
-            "images": deque(maxlen=args.generation_batch_size),
+            "image": deque(maxlen=args.generation_batch_size),
             "prompt": deque(maxlen=args.generation_batch_size),
             "completion": deque(maxlen=args.generation_batch_size),
             "rewards": defaultdict(lambda: deque(maxlen=args.generation_batch_size)),
@@ -2061,7 +2027,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
             if not is_vllm_available():
                 raise ImportError(
                     "vLLM is not available and `use_vllm` is set to True. Please install vLLM with "
-                    "`pip install trl[vllm]` to use it."
+                    "`pip install vllm` to use it."
                 )
 
             if self.vllm_mode == "server":
@@ -2090,15 +2056,14 @@ class _UnslothGRPOTrainer(BaseTrainer):
                 os.environ["RANK"] = str(self.accelerator.process_index)
                 os.environ["LOCAL_RANK"] = str(self.accelerator.local_process_index)
                 os.environ["WORLD_SIZE"] = str(self.accelerator.num_processes)
-                ensure_master_addr_port()
+                os.environ["MASTER_ADDR"] = os.environ.get("MASTER_ADDR", "localhost")
+                os.environ["MASTER_PORT"] = os.environ.get("MASTER_PORT", "12345")
 
                 if self.max_prompt_length is not None and self.max_completion_length is not None:
                     max_model_len = self.max_prompt_length + self.max_completion_length
                 else:
                     max_model_len = None
                 self.llm = model.vllm_engine
-                if self.args.vllm_enable_sleep_mode:
-                    self.llm.sleep(level=1)
             else:
                 raise ValueError(f"vllm_mode must be either 'server' or 'colocate', got '{self.vllm_mode}'.")
             self.guided_decoding_regex = args.vllm_guided_decoding_regex
@@ -2119,6 +2084,10 @@ class _UnslothGRPOTrainer(BaseTrainer):
                 "repetition_penalty": self.repetition_penalty,
                 "cache_implementation": args.cache_implementation,
             }
+            if args.use_transformers_paged:
+                generation_kwargs["max_batch_tokens"] = 512
+                generation_kwargs["num_blocks"] = 1024
+                generation_kwargs["block_size"] = 128
             if args.generation_kwargs is not None:
                 generation_kwargs.update(args.generation_kwargs)
             self.generation_config = GenerationConfig(**generation_kwargs)
@@ -2158,7 +2127,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
         # In GRPOTrainer, we preprocess data, so using the model's signature columns doesn't work.
         # Instead, we set them to the columns expected by the `training_step` method, hence the override.
         if self._signature_columns is None:
-            self._signature_columns = ["prompt", "image", "images"]
+            self._signature_columns = ["prompt", "image"]
 
     # This method overrides `Trainer.get_train_dataloader` to support our custom batching strategy.
     # Instead of returning a standard per-step batch (i.e., `per_device_batch_size), our dataloader loads an
@@ -2289,7 +2258,9 @@ class _UnslothGRPOTrainer(BaseTrainer):
         last_hidden_state = last_hidden_state[:, -logits_to_keep:, :]  # (B, logits_to_keep, H)
         return last_hidden_state
 
-    def get_high_entropy_mask(self, entropies: torch.Tensor, mask: torch.Tensor, threshold: float) -> torch.Tensor:
+    def get_high_entropy_mask(
+        self, entropies: torch.Tensor, mask: torch.Tensor, threshold: float, accelerator=None
+    ) -> torch.Tensor:
         """
         Returns a binary mask identifying tokens whose entropy exceeds a given quantile threshold.
 
@@ -2306,23 +2277,12 @@ class _UnslothGRPOTrainer(BaseTrainer):
                 Boolean mask of shape (batch_size, seq_len), where `True` indicates tokens with entropy >= threshold
                 and `False` otherwise.
         """
-        local = entropies[mask.bool()].float()
-
-        # Use a negative pad_value as a sentinel because entropy values are always >= 0.
-        # This guarantees that the sentinel cannot collide with any real entropy value.
-        pad_value = -1e9
-
-        # Pad across processes so that every rank has the same tensor length
-        padded = self.accelerator.pad_across_processes(local, dim=0, pad_index=pad_value)
-        gathered = self.accelerator.gather(padded)
-
-        # Drop sentinel values (safe because no entropy can be negative)
-        gathered = gathered[gathered != pad_value]
-
-        if gathered.numel() == 0:
+        non_pad_entropies = entropies[mask.bool()].float()
+        if non_pad_entropies.numel() == 0:
             return torch.zeros_like(entropies, dtype=torch.bool)
-
-        entropy_threshold = torch.quantile(gathered, threshold)
+        all_non_pad_entropies = self.accelerator.gather(non_pad_entropies)
+        # Filter out any empty tensors that might result from processes with no valid tokens
+        entropy_threshold = torch.quantile(all_non_pad_entropies, threshold)
         masked_entropies = entropies * mask.float()
         entropy_mask = masked_entropies >= entropy_threshold
         return entropy_mask & mask.bool()  # ensure padding tokens are always masked out
@@ -2720,18 +2680,30 @@ class _UnslothGRPOTrainer(BaseTrainer):
         rewards_per_func = gather(rewards_per_func)
         return rewards_per_func
 
-    def _generate_single_turn(self, prompts: list[str], images: Optional[list]):
+    def _generate_and_score_completions(
+        self, inputs: list[dict[str, Union[torch.Tensor, Any]]]
+    ) -> dict[str, Union[torch.Tensor, Any]]:
         device = self.accelerator.device
+        mode = "train" if self.model.training else "eval"
+
+        prompts = [x["prompt"] for x in inputs]
+
+        # We don't yet support visual reward models/function, so we keep a copy of the original text-only prompts for
+        # later use in the reward computation. If images are present, we insert {"type": "image"} as required by the
+        # VLM chat template.
+        original_prompts = copy.deepcopy(prompts)
 
         # If the prompts are conversational and the inputs contain images, we need to convert the prompts from
         # [{"role": "user", "content": "What color is the sky?"}] to
         # [{"role": "user", "content": [{"type": "image"}, {"type": "text", "text": "What color is the sky?"}]}]
         kwargs = {}
-        if images is not None:
-            kwargs = {"images": images}
-            for prompt, image_list in zip(prompts, images):
+        has_images = "image" in inputs[0]
+        if has_images:
+            images = [example.get("image") for example in inputs]
+            kwargs = {"images": [[img] for img in images]}
+            for prompt in prompts:
                 if isinstance(prompt, list):  # i.e., when using conversational data
-                    prepare_multimodal_messages(prompt, num_images=len(image_list))
+                    prepare_multimodal_messages(prompt, num_images=1)
 
         
         _chat_template_ = getattr(self.processing_class, "chat_template", None)
@@ -2739,7 +2711,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
         _supported_keys_ = set(("prompt", "chosen", "rejected", "completion", "messages", "label"))
 
         prompts_text = []
-        for _example_ in prompts:
+        for _example_ in inputs:
             _tokenizer_kwargs_ = {}
             if type(_example_) is not dict:
                 _example_ = {"prompt": _example_}
@@ -2751,20 +2723,38 @@ class _UnslothGRPOTrainer(BaseTrainer):
                         _tokenizer_kwargs_[k] = v
             _x_ = maybe_apply_chat_template(_example_, self.processing_class, **_tokenizer_kwargs_)["prompt"]
             prompts_text.append(_x_)
-        if images is not None:
-            prompt_inputs = self.processing_class(text=prompts_text, padding=True, return_tensors="pt", **kwargs)
-            prompt_inputs = super()._prepare_inputs(prompt_inputs)
-            forward_kwargs = {k: v for k, v in prompt_inputs.items() if k not in ["input_ids", "attention_mask"]}
-        else:
-            forward_kwargs = {}
+        prompt_inputs = self.processing_class(
+            text=prompts_text,
+            return_tensors="pt",
+            padding=True,
+            padding_side="left",
+            add_special_tokens=False,
+            **kwargs,
+        )
+        prompt_inputs = super()._prepare_inputs(prompt_inputs)
+        prompt_ids, prompt_mask = prompt_inputs["input_ids"], prompt_inputs["attention_mask"]
+        if self.max_prompt_length is not None:
+            # If max_prompt_length is set, we trim the prompt to keep only the last `max_prompt_length` tokens.
+            # Then we decode those tokens back into text. We manually remove leading pad tokens from the decoded text,
+            # because we can't use `skip_special_tokens=True` (some special tokens are still needed for generation).
+            protected = [self.image_token_id, self.vision_start_token_id, self.vision_end_token_id]
+            protected = [token for token in protected if token is not None]
+            prompt_ids, prompt_mask = truncate_with_protected_tokens(
+                prompt_ids, prompt_mask, self.max_prompt_length, protected
+            )
 
+            prompts_text = [re.sub(rf"^({re.escape(self.pad_token)})+", "", text) for text in prompts_text]
+
+            # The chat template inserts a single image token into the prompt text. However, when this text is later
+            # tokenized, the single image token string is expanded into multiple image token IDs, depending on the
+            # image size. Since we're detokenizing here, we may see repeated image tokens in the decoded text. We
+            # collapse them back into a single token string to match the original template.
+            if self.image_token is not None:
+                prompts_text = [
+                    re.sub(rf"({re.escape(self.image_token)})+", self.image_token, text) for text in prompts_text
+                ]
         # Generate completions using either vLLM or regular generation
         if self.use_vllm:
-            if self.vllm_mode == "colocate" and self.args.vllm_enable_sleep_mode:
-                # wake up colocated vLLM instances if needed
-                torch.cuda.empty_cache()  # required to avoid OOM in some cases
-                self.llm.wake_up()
-
             # First, update the vLLM weights if needed
             if self.state.global_step != self._last_loaded_step:
                 self._move_model_to_vllm()
@@ -2773,7 +2763,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
             # Generate completions using vLLM: gather all prompts and use them in a single call in the main process
             if self.vllm_mode == "server":
                 all_prompts_text = gather_object(prompts_text)
-                if images is not None:
+                if has_images:
                     all_images = gather_object(images)
 
                 if self.accelerator.is_main_process:
@@ -2782,13 +2772,13 @@ class _UnslothGRPOTrainer(BaseTrainer):
                     # prompt individually.
                     ordered_set_of_prompts = all_prompts_text[:: self.num_generations]
 
-                    if images is not None:
+                    if has_images:
                         ordered_set_of_images = all_images[:: self.num_generations]
                     else:
                         ordered_set_of_images = None
 
                     with profiling_context(self, "vLLM.generate"):
-                        output = self.vllm_client.generate(
+                        completion_ids = self.vllm_client.generate(
                             prompts=ordered_set_of_prompts,
                             images=ordered_set_of_images,
                             n=self.num_generations,
@@ -2798,29 +2788,19 @@ class _UnslothGRPOTrainer(BaseTrainer):
                             top_k=-1 if self.top_k is None else self.top_k,
                             min_p=0.0 if self.min_p is None else self.min_p,
                             max_tokens=self.max_completion_length,
-                            truncate_prompt_tokens=self.max_prompt_length,
                             guided_decoding_regex=self.guided_decoding_regex,
                             generation_kwargs=self.args.generation_kwargs,
                         )
-                        payload = (output["prompt_ids"], output["completion_ids"], output["logprobs"])
                 else:
-                    payload = None
-
-                # Broadcast the completions from the main process to all processes, ensuring each process receives its corresponding slice.
-                obj_list = [payload]
-                broadcast_object_list(obj_list, from_process=0)
-                all_prompt_ids, all_completion_ids, all_logprobs = obj_list[0]
-
-                # At this point, we only get 1 copy of each prompt, so we need to repeat them num_generations times
-                all_prompt_ids = [ids for ids in all_prompt_ids for _ in range(self.num_generations)]
-
+                    completion_ids = [None] * len(all_prompts_text)
+                # Broadcast the completions from the main process to all processes, ensuring each process receives its
+                # corresponding slice.
+                completion_ids = broadcast_object_list(completion_ids, from_process=0)
                 process_slice = slice(
                     self.accelerator.process_index * len(prompts),
                     (self.accelerator.process_index + 1) * len(prompts),
                 )
-                prompt_ids = all_prompt_ids[process_slice]
-                completion_ids = all_completion_ids[process_slice]
-                logprobs = all_logprobs[process_slice]
+                completion_ids = completion_ids[process_slice]
 
             # Generate completions using colocated vLLM instances: each device holds vLLM copy and work on their own batch of prompts
             elif self.vllm_mode == "colocate":
@@ -2837,9 +2817,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
                     "top_k": -1 if self.top_k is None else self.top_k,
                     "min_p": 0.0 if self.min_p is None else self.min_p,
                     "max_tokens": self.max_completion_length,
-                    "truncate_prompt_tokens": self.max_prompt_length,
                     "guided_decoding": guided_decoding,
-                    "logprobs": 0,  # only return the logprob of the generated token
                 }
                 if self.args.generation_kwargs is not None:
                     generation_kwargs.update(self.args.generation_kwargs)
@@ -2853,7 +2831,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
                     torch.distributed.all_gather_object(gathered_prompts, prompts_text, group=self.tp_group)
                     all_prompts_text = [p for sublist in gathered_prompts for p in sublist]
 
-                    if images is not None:
+                    if has_images:
                         gathered_images = [None for _ in range(self.vllm_tensor_parallel_size)]
                         torch.distributed.all_gather_object(gathered_images, images, group=self.tp_group)
                         all_images = [img for sublist in gathered_images for img in sublist]
@@ -2861,42 +2839,40 @@ class _UnslothGRPOTrainer(BaseTrainer):
                         all_images = None
                 else:
                     all_prompts_text = prompts_text
-                    all_images = images
+                    all_images = images if has_images else None
 
-                if images is not None and all_images:
+                if has_images and all_images:
                     vllm_inputs = []
-                    for prompt, image_list in zip(all_prompts_text, all_images):
-                        vllm_inputs.append({"prompt": prompt, "multi_modal_data": {"image": image_list}})
-
+                    for prompt, image in zip(all_prompts_text, all_images):
+                        if image is not None:
+                            vllm_inputs.append({"prompt": prompt, "multi_modal_data": {"image": image}})
+                        else:
+                            vllm_inputs.append(prompt)
                 else:
                     vllm_inputs = all_prompts_text
 
                 with profiling_context(self, "vLLM.generate"):
+                    if hasattr(self, 'llm'):
+                        if getattr(self.llm.llm_engine.vllm_config.model_config, 'enable_sleep_mode', False):
+                            self.llm.wake_up()
                     all_outputs = self.llm.generate(vllm_inputs, sampling_params=sampling_params, use_tqdm=False, lora_request = self.model.load_lora('grpo_trainer_lora_model', load_tensors = True))
 
-                all_prompt_ids = [output.prompt_token_ids for output in all_outputs]
-                all_completion_ids = [output.token_ids for outputs in all_outputs for output in outputs.outputs]
-                all_logprobs = [
-                    [next(iter(lp.values())).logprob for lp in output.logprobs]
-                    for outputs in all_outputs
-                    for output in outputs.outputs
-                ]
+                    if hasattr(self, 'llm'):
+                        if getattr(self.llm.llm_engine.vllm_config.model_config, 'enable_sleep_mode', False):
+                            self.llm.sleep(os.environ.get('VLLM_SLEEP_MODE', 1))
+                completion_ids = [output.token_ids for outputs in all_outputs for output in outputs.outputs]
 
                 if self.vllm_tensor_parallel_size > 1:
                     # Slice completions for this rank within its TP group.
                     # Each rank generates all outputs — we keep only our share.
                     local_rank_in_group = torch.distributed.get_rank(group=self.tp_group)
                     tp_slice = slice(local_rank_in_group * orig_size, (local_rank_in_group + 1) * orig_size)
-                    prompt_ids = all_prompt_ids[tp_slice]
-                    completion_ids = all_completion_ids[tp_slice]
-                    logprobs = all_logprobs[tp_slice]
-                else:
-                    prompt_ids = all_prompt_ids
-                    completion_ids = all_completion_ids
-                    logprobs = all_logprobs
+                    completion_ids = completion_ids[tp_slice]
 
-                if self.args.vllm_enable_sleep_mode:
-                    self.llm.sleep(level=1)
+            # Pad the completions, and concatenate them with the prompts
+            completion_ids = [torch.tensor(ids, device=device) for ids in completion_ids]
+            completion_ids = pad(completion_ids, padding_value=self.pad_token_id)
+            prompt_completion_ids = torch.cat([prompt_ids, completion_ids], dim=1)
 
         elif self.use_transformers_paged:
             # Re-process inputs for paged generation if needed
@@ -2925,27 +2901,16 @@ class _UnslothGRPOTrainer(BaseTrainer):
                     all_outputs = unwrapped_model.generate_batch(
                         paged_prompt_inputs.input_ids, generation_config=self.generation_config, progress_bar=False
                     )
-                    unwrapped_model.train()  # restore training mode, as generate_batch forces eval mode
             completion_ids = [output.generated_tokens for output in all_outputs.values()]
-            prompt_ids = paged_prompt_inputs.input_ids
+            completion_ids = [torch.tensor(ids, device=device) for ids in completion_ids]
+            completion_ids = pad(completion_ids, padding_value=self.pad_token_id, padding_side="right")
+            prompt_ids = [torch.tensor(ids, device=device) for ids in paged_prompt_inputs.input_ids]
+            prompt_ids = pad(prompt_ids, padding_value=self.pad_token_id, padding_side="left")
+            prompt_completion_ids = torch.cat([prompt_ids, completion_ids], dim=1)
             # Restore the original attention implementation, training mode
             self.model_wrapped.config._attn_implementation = previous_attn
-            logprobs = None  # not used in this case
-
         else:
             # Regular generation path
-            generate_inputs = self.processing_class(
-                text=prompts_text,
-                return_tensors="pt",
-                padding=True,
-                padding_side="left",
-                max_length=self.max_prompt_length,
-                truncation=True,
-                add_special_tokens=False,
-                **kwargs,
-            )
-            generate_inputs = super()._prepare_inputs(generate_inputs)
-
             with (
                 profiling_context(self, "transformers.generate"),
                 unwrap_model_for_generation(
@@ -2954,120 +2919,38 @@ class _UnslothGRPOTrainer(BaseTrainer):
                 torch.no_grad(),
                 FSDP.summon_full_params(self.model_wrapped, recurse=False) if self.is_fsdp_enabled else nullcontext(),
             ):
+                prompt_inputs["input_ids"], prompt_inputs["attention_mask"] = prompt_ids, prompt_mask
                 prompt_completion_ids = unwrapped_model.generate(
-                    **generate_inputs, generation_config=self.generation_config, disable_compile=True
+                    **prompt_inputs, generation_config=self.generation_config, disable_compile=True
                 )
             # Compute prompt length and extract completion ids
-            prompt_ids, prompt_mask = generate_inputs["input_ids"], generate_inputs["attention_mask"]
             prompt_length = prompt_ids.size(1)
+            prompt_ids = prompt_completion_ids[:, :prompt_length]
             completion_ids = prompt_completion_ids[:, prompt_length:]
 
-            # Mask everything after the first EOS token
-            is_eos = completion_ids == self.eos_token_id
-            eos_idx = torch.full((is_eos.size(0),), is_eos.size(1), dtype=torch.long, device=device)
-            eos_idx[is_eos.any(dim=1)] = is_eos.int().argmax(dim=1)[is_eos.any(dim=1)]
-            sequence_indices = torch.arange(is_eos.size(1), device=device).expand(is_eos.size(0), -1)
-            completion_mask = (sequence_indices <= eos_idx.unsqueeze(1)).int()
-            prompt_ids = [p[m].tolist() for p, m in zip(prompt_ids, prompt_mask.bool())]
-            completion_ids = [c[m].tolist() for c, m in zip(completion_ids, completion_mask.bool())]
-            logprobs = None  # not used in this case
+        # Mask everything after the first EOS token
+        is_eos = completion_ids == self.eos_token_id
+        eos_idx = torch.full((is_eos.size(0),), is_eos.size(1), dtype=torch.long, device=device)
+        eos_idx[is_eos.any(dim=1)] = is_eos.int().argmax(dim=1)[is_eos.any(dim=1)]
+        sequence_indices = torch.arange(is_eos.size(1), device=device).expand(is_eos.size(0), -1)
+        completion_mask = (sequence_indices <= eos_idx.unsqueeze(1)).int()
 
-        return prompt_ids, completion_ids, logprobs, forward_kwargs
+        # Convert tensor to a list of lists of token IDs. This will be passed to the reward function, avoiding the need
+        # to re-tokenize completions if the reward is computed from tokens.
+        completion_ids_list = [row[mask_row].tolist() for row, mask_row in zip(completion_ids, completion_mask.bool())]
 
-    def _generate(self, prompts: list[str], images: Optional[list]):
-        device = self.accelerator.device
-        mode = "train" if self.model.training else "eval"
-
-        prompt_ids, completion_ids, logprobs, forward_kwargs = self._generate_single_turn(prompts, images)
-
-        # Get completion length per sequence, used for logging
-        prompt_lengths = torch.tensor([len(ids) for ids in prompt_ids], device=device)
-        completion_lengths = torch.tensor([len(ids) for ids in completion_ids], device=device)
-        agg_prompt_lengths = self.accelerator.gather(prompt_lengths)
+        # Sum along sequence dimension (dim=1) to get completion length per sequence, used for logging
+        completion_lengths = completion_mask.sum(1)
         agg_completion_lengths = self.accelerator.gather(completion_lengths)
-        total_prompt_tokens = agg_prompt_lengths.sum()
-        total_completion_tokens = agg_completion_lengths.sum()  # = num_items_in_batch, required for the DAPO loss
-
-        # Log the metrics
-        if mode == "train":
-            self.state.num_input_tokens_seen += (total_prompt_tokens + total_completion_tokens).item()
-        self._metrics[mode]["num_tokens"] = [self.state.num_input_tokens_seen]
-
-        # Log completion lengths, mean, min, max
-        self._metrics[mode]["completions/mean_length"].append(agg_completion_lengths.float().mean().item())
-        self._metrics[mode]["completions/min_length"].append(agg_completion_lengths.float().min().item())
-        self._metrics[mode]["completions/max_length"].append(agg_completion_lengths.float().max().item())
-
-        # Identify sequences that terminated with EOS and log their lengths
-        eos_and_pad = [self.eos_token_id, self.pad_token_id]
-        is_truncated = torch.tensor([ids[-1] not in eos_and_pad for ids in completion_ids], device=device)
-        agg_is_truncated = self.accelerator.gather(is_truncated)
-        self._metrics[mode]["completions/clipped_ratio"].append(agg_is_truncated.float().mean().item())
-        term_completion_lengths = agg_completion_lengths[~agg_is_truncated]
-        if len(term_completion_lengths) == 0:  # edge case where no terminated sequences are found
-            term_completion_lengths = torch.zeros(1, device=device)
-        self._metrics[mode]["completions/mean_terminated_length"].append(term_completion_lengths.float().mean().item())
-        self._metrics[mode]["completions/min_terminated_length"].append(term_completion_lengths.float().min().item())
-        self._metrics[mode]["completions/max_terminated_length"].append(term_completion_lengths.float().max().item())
-
-        return prompt_ids, completion_ids, total_completion_tokens, logprobs, forward_kwargs
-
-    def _generate_and_score_completions(
-        self, inputs: list[dict[str, Union[torch.Tensor, Any]]]
-    ) -> dict[str, Union[torch.Tensor, Any]]:
-        device = self.accelerator.device
-        mode = "train" if self.model.training else "eval"
-
-        prompts = [x["prompt"] for x in inputs]
-
-        if "images" in inputs[0]:
-            images = [example.get("images") for example in inputs]
-        elif "image" in inputs[0]:
-            images = [[example.get("image")] if example.get("image") is not None else None for example in inputs]
-        else:
-            images = None
-        # Transformers requires at least one image in the batch, otherwise it throws an error
-        if images is not None and all(img_list == [] for img_list in images):
-            images = None
-
-        (
-            prompt_ids_list,
-            completion_ids_list,
-            num_items_in_batch,
-            sampling_per_token_logps_list,
-            forward_kwargs,
-        ) = self._generate(prompts, images)
-
-        # Convert lists of token IDs to padded tensors
-        prompt_ids = [torch.tensor(ids, device=device) for ids in prompt_ids_list]
-        prompt_mask = [torch.ones_like(ids, dtype=torch.long) for ids in prompt_ids]
-        prompt_ids = pad(prompt_ids, padding_value=self.pad_token_id, padding_side="left")
-        prompt_mask = pad(prompt_mask, padding_value=0, padding_side="left")
-        completion_ids = [torch.tensor(ids, device=device) for ids in completion_ids_list]
-        completion_mask = [torch.ones_like(ids, dtype=torch.long) for ids in completion_ids]
-        completion_ids = pad(completion_ids, padding_value=self.pad_token_id, padding_side="right")
-        completion_mask = pad(completion_mask, padding_value=0, padding_side="right")
-        if sampling_per_token_logps_list is not None:
-            sampling_per_token_logps = [torch.tensor(logps, device=device) for logps in sampling_per_token_logps_list]
-            sampling_per_token_logps = pad(sampling_per_token_logps, padding_value=0.0, padding_side="right")
-        else:
-            sampling_per_token_logps = None
+        num_items_in_batch = agg_completion_lengths.sum()  # this is required for the DAPO loss
 
         # If mask_truncated_completions is enabled, zero out truncated completions in completion_mask
         if self.mask_truncated_completions:
-            eos_and_pad = [self.eos_token_id, self.pad_token_id]
-            is_truncated = torch.tensor([ids[-1] not in eos_and_pad for ids in completion_ids_list], device=device)
-            completion_mask = completion_mask * (~is_truncated).unsqueeze(1).int()
+            truncated_completions = ~is_eos.any(dim=1)
+            completion_mask = completion_mask * (~truncated_completions).unsqueeze(1).int()
 
         # Concatenate prompt_mask with completion_mask for logit computation
-        prompt_completion_ids = torch.cat([prompt_ids, completion_ids], dim=1)  # (B, P+C)
         attention_mask = torch.cat([prompt_mask, completion_mask], dim=1)  # (B, P+C)
-        # If token_type_ids are used, extend them with zeros for the completion part
-        if "token_type_ids" in forward_kwargs:
-            token_type_ids = forward_kwargs["token_type_ids"]
-            forward_kwargs["token_type_ids"] = torch.cat(
-                [token_type_ids, token_type_ids.new_zeros(completion_ids.shape)], dim=1
-            )
 
         logits_to_keep = completion_ids.size(1)  # we only need to compute the logits for the completion tokens
         
@@ -3087,39 +2970,27 @@ class _UnslothGRPOTrainer(BaseTrainer):
                 max_left_pad = torch.max(left_pad_tokens_per_prompt).item()
         self.model.for_training()
 
-        num_images = [len(img_list) for img_list in images] if images is not None else None
-
         with torch.no_grad():
             # If the generation and optimization steps are misaligned—i.e., if generation does not occur at the end of
             # a full optimizer step (when gradient_accumulation_steps is not a multiple of generate_every)—then the
             # samples may come from an earlier version of the model. In that case, we need to track old_per_token_logps
             # for importance sampling. If the steps are aligned, importance sampling isn't necessary and we set
             # old_per_token_logps to None.
-            # When using vLLM, we always compute old_per_token_logps for importance sampling, it was shown that the
-            # distribution mismatch between vLLM and the training model can be large and harm the training.
             generate_every = self.args.steps_per_generation * self.num_iterations  # generation frequency
-        
-            if self.args.gradient_accumulation_steps % generate_every != 0 or (
-                self.use_vllm
-            ):
+            if self.args.gradient_accumulation_steps % generate_every != 0:
                 old_per_token_logps, _ = self._get_per_token_logps_and_entropies(
                     self.model,
                     prompt_completion_ids,
                     attention_mask,
                     logits_to_keep,
                     batch_size,
-                    num_images=num_images,
-                    **forward_kwargs,  # may contain pixel_values, image_grid_thw, pixel_attention_mask and image_sizes
+                    pixel_values=prompt_inputs.get("pixel_values"),
+                    image_grid_thw=prompt_inputs.get("image_grid_thw"),
+                    pixel_attention_mask=prompt_inputs.get("pixel_attention_mask"),
+                    image_sizes=prompt_inputs.get("image_sizes"),
                 )
             else:
                 old_per_token_logps = None
-
-            # Compute the importance sampling ratio when using vLLM, to correct for potential distribution mismatch
-            if False and self.use_vllm and self.vllm_importance_sampling_correction:
-                importance_sampling_ratio = torch.exp(old_per_token_logps - sampling_per_token_logps)
-                importance_sampling_ratio = torch.clamp(
-                    importance_sampling_ratio, max=self.vllm_importance_sampling_cap
-                )
 
             # Compute the per-token log probabilities for the reference model
             if self.beta != 0.0:
@@ -3130,8 +3001,10 @@ class _UnslothGRPOTrainer(BaseTrainer):
                         attention_mask,
                         logits_to_keep,
                         batch_size=batch_size,
-                        num_images=num_images,
-                        **forward_kwargs,  # may contain pixel_values, image_grid_thw, pixel_attention_mask and image_sizes
+                        pixel_values=prompt_inputs.get("pixel_values"),
+                        image_grid_thw=prompt_inputs.get("image_grid_thw"),
+                        pixel_attention_mask=prompt_inputs.get("pixel_attention_mask"),
+                        image_sizes=prompt_inputs.get("image_sizes"),
                     )
                 else:
                     with self.accelerator.unwrap_model(self.model).disable_adapter():
@@ -3141,14 +3014,15 @@ class _UnslothGRPOTrainer(BaseTrainer):
                             attention_mask,
                             logits_to_keep,
                             batch_size=batch_size,
-                            num_images=num_images,
-                            **forward_kwargs,  # may contain pixel_values, image_grid_thw, pixel_attention_mask and image_sizes
+                            pixel_values=prompt_inputs.get("pixel_values"),
+                            image_grid_thw=prompt_inputs.get("image_grid_thw"),
+                            pixel_attention_mask=prompt_inputs.get("pixel_attention_mask"),
+                            image_sizes=prompt_inputs.get("image_sizes"),
                         )
             else:
                 ref_per_token_logps = None
 
-        # Decode
-        prompts_text = self.processing_class.batch_decode(prompt_ids, skip_special_tokens=True)
+        # Decode the generated completions
         completions_text = self.processing_class.batch_decode(completion_ids, skip_special_tokens=True)
         if is_conversational(inputs[0]):
             completions = []
@@ -3161,7 +3035,7 @@ class _UnslothGRPOTrainer(BaseTrainer):
         # Calculate rewards for each reward function. rewards_per_func aggregates rewards across all processes. This is
         # important because rewards will be normalized per group, and completions are distributed. We will later slice
         # rewards_per_func to extract each process's subset.
-        rewards_per_func = self._calculate_rewards(inputs, prompts, completions, completion_ids_list)
+        rewards_per_func = self._calculate_rewards(inputs, original_prompts, completions, completion_ids_list)
 
         # Apply weights to each reward function's output and sum
         rewards = (rewards_per_func * self.reward_weights.to(device).unsqueeze(0)).nansum(dim=1)
@@ -3197,6 +3071,27 @@ class _UnslothGRPOTrainer(BaseTrainer):
         all_process_advantages = advantages.clone()  # keep the aggregated advantages for logging
         advantages = advantages[process_slice]
 
+        # Log the metrics
+        if mode == "train":
+            self.state.num_input_tokens_seen += self.accelerator.gather(attention_mask.sum()).sum().item()
+        self._metrics[mode]["num_tokens"] = [self.state.num_input_tokens_seen]
+
+        # Log completion lengths, mean, min, max
+        self._metrics[mode]["completions/mean_length"].append(agg_completion_lengths.float().mean().item())
+        self._metrics[mode]["completions/min_length"].append(agg_completion_lengths.float().min().item())
+        self._metrics[mode]["completions/max_length"].append(agg_completion_lengths.float().max().item())
+
+        # Identify sequences that terminated with EOS and log their lengths
+        agg_terminated_with_eos = self.accelerator.gather(is_eos.any(dim=1))
+        term_completion_lengths = agg_completion_lengths[agg_terminated_with_eos]
+        clipped_completions_ratio = 1 - len(term_completion_lengths) / len(agg_completion_lengths)
+        self._metrics[mode]["completions/clipped_ratio"].append(clipped_completions_ratio)
+        if len(term_completion_lengths) == 0:  # edge case where no terminated sequences are found
+            term_completion_lengths = torch.zeros(1, device=device)
+        self._metrics[mode]["completions/mean_terminated_length"].append(term_completion_lengths.float().mean().item())
+        self._metrics[mode]["completions/min_terminated_length"].append(term_completion_lengths.float().min().item())
+        self._metrics[mode]["completions/max_terminated_length"].append(term_completion_lengths.float().max().item())
+
         # Calculate mean reward per function, but only for samples where the function was applied (non-NaN values)
         for i, reward_func_name in enumerate(self.reward_func_names):
             mean_rewards = torch.nanmean(rewards_per_func[:, i]).item()
@@ -3214,40 +3109,8 @@ class _UnslothGRPOTrainer(BaseTrainer):
             self._logs["rewards"][name].extend(rewards_per_func[:, i].tolist())
         self._logs["advantages"].extend(all_process_advantages.tolist())
 
-        if images is not None:
-            self._logs["images"].extend(gather_object(images))
-
-        if False and self.use_vllm and self.vllm_importance_sampling_correction:
-            delta = torch.abs(old_per_token_logps - sampling_per_token_logps)
-            delta = delta[completion_mask.bool()]
-            mean_delta = torch.mean(delta) if delta.numel() > 0 else torch.tensor(0.0, device=device)
-            max_delta = torch.max(delta) if delta.numel() > 0 else torch.tensor(0.0, device=device)
-            self._metrics[mode]["sampling/sampling_logp_difference/mean"].append(
-                self.accelerator.gather(mean_delta).mean().item()
-            )
-            self._metrics[mode]["sampling/sampling_logp_difference/max"].append(
-                self.accelerator.gather(max_delta).max().item()
-            )
-
-            flat_is_ratio = importance_sampling_ratio[completion_mask.bool()]
-            min_importance_sampling_ratio = (
-                torch.min(flat_is_ratio) if flat_is_ratio.numel() > 0 else torch.tensor(0.0, device=device)
-            )
-            mean_importance_sampling_ratio = (
-                torch.mean(flat_is_ratio) if flat_is_ratio.numel() > 0 else torch.tensor(0.0, device=device)
-            )
-            max_importance_sampling_ratio = (
-                torch.max(flat_is_ratio) if flat_is_ratio.numel() > 0 else torch.tensor(0.0, device=device)
-            )
-            self._metrics[mode]["sampling/importance_sampling_ratio/min"].append(
-                nanmin(self.accelerator.gather(min_importance_sampling_ratio)).item()
-            )
-            self._metrics[mode]["sampling/importance_sampling_ratio/mean"].append(
-                self.accelerator.gather(mean_importance_sampling_ratio).nanmean().item()
-            )
-            self._metrics[mode]["sampling/importance_sampling_ratio/max"].append(
-                nanmax(self.accelerator.gather(max_importance_sampling_ratio)).item()
-            )
+        if has_images:
+            self._logs["image"].extend(gather_object(images))
 
         output = {
             "prompt_ids": prompt_ids,
@@ -3259,22 +3122,16 @@ class _UnslothGRPOTrainer(BaseTrainer):
         }
         if old_per_token_logps is not None:
             output["old_per_token_logps"] = old_per_token_logps
-        if False and self.use_vllm and self.vllm_importance_sampling_correction:
-            output["importance_sampling_ratio"] = importance_sampling_ratio
         if ref_per_token_logps is not None:
             output["ref_per_token_logps"] = ref_per_token_logps
-        if "pixel_values" in forward_kwargs:
-            output["pixel_values"] = forward_kwargs["pixel_values"]
-        if "image_grid_thw" in forward_kwargs:
-            output["image_grid_thw"] = forward_kwargs["image_grid_thw"]
-        if "pixel_attention_mask" in forward_kwargs:
-            output["pixel_attention_mask"] = forward_kwargs["pixel_attention_mask"]
-        if "image_sizes" in forward_kwargs:
-            output["image_sizes"] = forward_kwargs["image_sizes"]
-        if "token_type_ids" in forward_kwargs:
-            output["token_type_ids"] = forward_kwargs["token_type_ids"]
-        if images is not None:
-            output["num_images"] = num_images
+        if "pixel_values" in prompt_inputs:
+            output["pixel_values"] = prompt_inputs["pixel_values"]
+        if "image_grid_thw" in prompt_inputs:
+            output["image_grid_thw"] = prompt_inputs["image_grid_thw"]
+        if "pixel_attention_mask" in prompt_inputs:
+            output["pixel_attention_mask"] = prompt_inputs["pixel_attention_mask"]
+        if "image_sizes" in prompt_inputs:
+            output["image_sizes"] = prompt_inputs["image_sizes"]
         if max_left_pad is not None:
             output["max_left_pad"] = torch.tensor(prompt_ids.shape[0] * [max_left_pad]).unsqueeze(-1)        
         try:
@@ -3576,10 +3433,8 @@ class _UnslothGRPOTrainer(BaseTrainer):
             compute_entropy=True,
             pixel_values=inputs.get("pixel_values"),
             image_grid_thw=inputs.get("image_grid_thw"),
-            num_images=inputs.get("num_images"),
             pixel_attention_mask=inputs.get("pixel_attention_mask"),
             image_sizes=inputs.get("image_sizes"),
-            token_type_ids=inputs.get("token_type_ids"),
         )
 
         if self.top_entropy_quantile < 1.0:
@@ -3596,11 +3451,9 @@ class _UnslothGRPOTrainer(BaseTrainer):
 
         # Compute the loss
         advantages = inputs["advantages"]
-        # When num_iterations == 1 and steps_per_generation <= gradient_accumulation_steps,
-        # old_per_token_logps == per_token_logps. In this case we can skip its computation
-        # (see _generate_and_score_completions) and instead use per_token_logps.detach().
-        # The exception is when using vLLM, where we always compute old_per_token_logps
-        # for importance sampling
+        # When using num_iterations == 1 and steps_per_generation <= gradient_accumulation_steps
+        # old_per_token_logps == per_token_logps, so we can skip it's computation
+        # (see _generate_and_score_completions) and use per_token_logps.detach() instead.
         old_per_token_logps = inputs.get("old_per_token_logps")
         old_per_token_logps = per_token_logps.detach() if old_per_token_logps is None else old_per_token_logps
 
@@ -3630,10 +3483,6 @@ class _UnslothGRPOTrainer(BaseTrainer):
         per_token_loss = -torch.min(per_token_loss1, per_token_loss2)
         if entropy_mask is not None:
             per_token_loss = per_token_loss * entropy_mask
-
-        if self.use_vllm and self.vllm_importance_sampling_correction:
-            per_token_loss = per_token_loss * inputs["importance_sampling_ratio"]
-
         if self.beta != 0.0:
             per_token_loss = per_token_loss + self.beta * per_token_kl
 
@@ -3732,11 +3581,14 @@ class _UnslothGRPOTrainer(BaseTrainer):
                     "advantage": self._logs["advantages"],
                 }
 
-                if self._logs["images"]:
-                    table["images"] = []
-                    for image_list in self._logs["images"]:
-                        # Convert images to wandb Image objects for proper visualization
-                        table["images"].append([wandb.Image(image) for image in image_list])
+                if self._logs["image"]:
+                    table["image"] = []
+                    for img in self._logs["image"]:
+                        if img is not None:
+                            # Convert images to wandb Image objects for proper visualization
+                            table["image"].append(wandb.Image(img))
+                        else:
+                            table["image"].append(None)
 
                 df = pd.DataFrame(table)
                 if self.wandb_log_unique_prompts:
@@ -3751,6 +3603,75 @@ class _UnslothGRPOTrainer(BaseTrainer):
             model_name = self.args.hub_model_id.split("/")[-1]
         self.create_model_card(model_name=model_name)
         super()._save_checkpoint(model, trial)
+
+    def create_model_card(
+        self,
+        model_name: Optional[str] = None,
+        dataset_name: Optional[str] = None,
+        tags: Union[str, list[str], None] = None,
+    ):
+        """
+        Creates a draft of a model card using the information available to the `Trainer`.
+
+        Args:
+            model_name (`str` or `None`, *optional*, defaults to `None`):
+                Name of the model.
+            dataset_name (`str` or `None`, *optional*, defaults to `None`):
+                Name of the dataset used for training.
+            tags (`str`, `list[str]` or `None`, *optional*, defaults to `None`):
+                Tags to be associated with the model card.
+        """
+        if not self.is_world_process_zero():
+            return
+
+        if hasattr(self.model.config, "_name_or_path") and not os.path.isdir(self.model.config._name_or_path):
+            base_model = self.model.config._name_or_path
+        else:
+            base_model = None
+
+        # normalize `tags` to a mutable set
+        if tags is None:
+            tags = set()
+        elif isinstance(tags, str):
+            tags = {tags}
+        else:
+            tags = set(tags)
+
+        if hasattr(self.model.config, "unsloth_version"):
+            tags.add("unsloth")
+
+        if "JOB_ID" in os.environ:
+            tags.add("hf_jobs")
+
+        tags.update(self._tag_names)
+
+        # docstyle-ignore
+        citation = textwrap.dedent(
+            """\
+            @article{shao2024deepseekmath,
+                title        = {{DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models}},
+                author       = {Zhihong Shao and Peiyi Wang and Qihao Zhu and Runxin Xu and Junxiao Song and Mingchuan Zhang and Y. K. Li and Y. Wu and Daya Guo},
+                year         = 2024,
+                eprint       = {arXiv:2402.03300},
+            }
+            """
+        )
+
+        model_card = generate_model_card(
+            base_model=base_model,
+            model_name=model_name,
+            hub_model_id=self.hub_model_id,
+            dataset_name=dataset_name,
+            tags=tags,
+            wandb_url=wandb.run.url if is_wandb_available() and wandb.run is not None else None,
+            comet_url=get_comet_experiment_url(),
+            trainer_name="GRPO",
+            trainer_citation=citation,
+            paper_title="DeepSeekMath: Pushing the Limits of Mathematical Reasoning in Open Language Models",
+            paper_id="2402.03300",
+        )
+
+        model_card.save(os.path.join(self.args.output_dir, "README.md"))
 class UnslothGRPOTrainer(_UnslothGRPOTrainer):
     """
     
@@ -3811,7 +3732,7 @@ class UnslothGRPOTrainer(_UnslothGRPOTrainer):
                   reward function's signature.
             - A list of reward functions, where each item can independently be any of the above types. Mixing different
             types within the list (e.g., a string model ID and a custom reward function) is allowed.
-        args ([`GRPOConfig`], *optional*):
+        args ([`GRPOConfig`], *optional*, defaults to `None`):
             Configuration for this trainer. If `None`, a default configuration is used.
         train_dataset ([`~datasets.Dataset`] or [`~datasets.IterableDataset`]):
             Dataset to use for training. It must include a column `"prompt"`. Any additional columns in the dataset is
@@ -3820,14 +3741,15 @@ class UnslothGRPOTrainer(_UnslothGRPOTrainer):
             - [Standard](dataset_formats#standard): Each sample contains plain text.
             - [Conversational](dataset_formats#conversational): Each sample contains structured messages (e.g., role
               and content).
-        eval_dataset ([`~datasets.Dataset`], [`~datasets.IterableDataset`] or `dict[str, Union[Dataset, IterableDataset]]`):
+        eval_dataset ([`~datasets.Dataset`], [`~datasets.IterableDataset`] or `dict[str, Union[Dataset,
+        IterableDataset]]`):
             Dataset to use for evaluation. It must meet the same requirements as `train_dataset`.
-        processing_class ([`~transformers.PreTrainedTokenizerBase`], [`~transformers.ProcessorMixin`], *optional*):
+        processing_class ([`~transformers.PreTrainedTokenizerBase`], [`~transformers.ProcessorMixin`] or `None`, *optional*, defaults to `None`):
             Processing class used to process the data. The padding side must be set to "left". If `None`, the
             processing class is loaded from the model's name with [`~transformers.AutoProcessor.from_pretrained`]. A
             padding token, `tokenizer.pad_token`, must be set. If the processing class has not set a padding token,
             `tokenizer.eos_token` will be used as the default.
-        reward_processing_classes ([`~transformers.PreTrainedTokenizerBase`] or `list[PreTrainedTokenizerBase]`, *optional*):
+        reward_processing_classes (`Union[PreTrainedTokenizerBase, list[PreTrainedTokenizerBase]]`, *optional*, defaults to `None`):
             Processing classes corresponding to the reward functions specified in `reward_funcs`. Can be either:
 
             - A single processing class: Used when `reward_funcs` contains only one reward function.
@@ -3837,16 +3759,17 @@ class UnslothGRPOTrainer(_UnslothGRPOTrainer):
             [`~transformers.AutoTokenizer.from_pretrained`]. For elements in `reward_funcs` that are custom reward
             functions (not [`~transformers.PreTrainedModel`]), the corresponding entries in `reward_processing_classes`
             are ignored.
-        callbacks (list of [`~transformers.TrainerCallback`], *optional*):
+        callbacks (list of [`~transformers.TrainerCallback`], *optional*, defaults to `None`):
             List of callbacks to customize the training loop. Will add those to the list of default callbacks detailed
             in [here](https://huggingface.co/docs/transformers/main_classes/callback).
 
             If you want to remove one of the default callbacks used, use the [`~transformers.Trainer.remove_callback`]
             method.
-        optimizers (`tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None, None)`):
+        optimizers (`tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR]`, *optional*, defaults to `(None,
+        None)`):
             A tuple containing the optimizer and the scheduler to use. Will default to an instance of [`AdamW`] on your
             model and a scheduler given by [`get_linear_schedule_with_warmup`] controlled by `args`.
-        peft_config ([`~peft.PeftConfig`], *optional*):
+        peft_config ([`~peft.PeftConfig`], *optional*, defaults to `None`):
             PEFT configuration used to wrap the model. If `None`, the model is not wrapped.
     
     """
