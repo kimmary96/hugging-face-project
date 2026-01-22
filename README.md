@@ -21,26 +21,34 @@ hugging-face-project/
 │
 ├── data/                   # 데이터 저장소
 │   ├── raw/                # 원본 데이터
-│   │   ├── dummy_users.json
-│   │   └── carrot_meetings_100.csv (예정)
+│   │   └── dummy_users.json
 │   └── processed/          # 가공된 데이터
-│       └── train_dataset.jsonl
+│       ├── user_profiles_vectorized.json      # Qwen 2.5 추론 결과
+│       ├── user_profiles_qwen3_result.json    # Qwen 3 추론 결과
+│       └── comparison_result.md               # 모델 비교 결과
 │
 ├── src/                    # 소스 코드
 │   ├── task1_inference/    # [1차 과제] 관심사 추론 & 임베딩
-│   │   ├── generate_dummy.py   # 더미 데이터 생성
-│   │   └── inference_user.py   # LLM 추론 및 임베딩 생성
+│   │   ├── generate_dummy.py        # 더미 데이터 생성
+│   │   ├── inference_user.py        # LLM 추론 및 임베딩 생성
+│   │   ├── inference_unsloth_fin.py # Unsloth 최적화 추론 (Qwen 3)
+│   │   └── inference_unsloth_test.py # 추론 테스트 스크립트
 │   │
 │   ├── task2_finetuning/   # [2차 과제] 모임 분류 파인튜닝
 │   │   ├── preprocess.py       # 데이터 전처리 (CSV → JSONL)
 │   │   └── train_lora.py       # Unsloth LoRA 파인튜닝
 │   │
-│   └── task3_matching/     # [3차 과제] 매칭 및 시각화
-│       ├── match_logic.py      # 코사인 유사도 매칭
-│       └── visualize.py        # 결과 시각화 (히트맵 등)
+│   ├── task3_matching/     # [3차 과제] 매칭 및 시각화
+│   │   ├── match_logic.py      # 코사인 유사도 매칭
+│   │   └── visualize.py        # 결과 시각화 (히트맵 등)
+│   │
+│   └── utils/              # 유틸리티
+│       └── compare_results.py  # Qwen 2.5 vs Qwen 3 결과 비교
 │
 ├── saved_models/           # [Git 제외] 학습된 모델 저장
 │   └── unsloth_lora_model/
+│
+├── unsloth_compiled_cache/ # [Git 제외] Unsloth 컴파일 캐시
 │
 └── outputs/                # 실험 결과물
     ├── user_vectors.pkl
@@ -49,11 +57,11 @@ hugging-face-project/
 
 ## 기술 스택
 
-- **LLM**: Qwen2.5-14B-Instruct (4bit 양자화)
+- **LLM**: Qwen2.5-14B-Instruct, Qwen3-14B (4bit 양자화)
 - **최적화**: Unsloth (추론 속도 2배 향상)
 - **임베딩**: BAAI/bge-m3
 - **파인튜닝**: LoRA (Low-Rank Adaptation)
-- **프레임워크**: PyTorch, Transformers, sentence-transformers
+- **프레임워크**: PyTorch, Transformers, sentence-transformers, trl, peft
 
 ## 설치 방법
 
