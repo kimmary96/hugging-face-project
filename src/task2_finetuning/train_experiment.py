@@ -1,0 +1,170 @@
+import os
+from unsloth import FastLanguageModel
+from datasets import load_dataset
+from trl.trainer.sft_trainer import SFTTrainer
+from trl.trainer.sft_config import SFTConfig
+import matplotlib.pyplot as plt
+
+# ==========================================
+# 실험 하이퍼파라미터 (이 부분을 바꿔가며 실험하세요)
+# ==========================================
+EXP_NAME = "Exp2_Overfitting"
+LEARNING_RATE = 2e-4
+NUM_TRAIN_EPOCHS = 1
+LORA_RANK = 16
+
+# ==========================================
+# 설정
+# ==========================================
+MODEL_NAME = "unsloth/Qwen3-4B-Instruct-2507-unsloth-bnb-4bit"
+DATA_FILE = "src/task2_finetuning/cleaned_train_data.jsonl"
+OUTPUT_DIR = f"outputs_experiments/{EXP_NAME}"
+MAX_SEQ_LENGTH = 2048
+
+ALPACA_PROMPT = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+
+### Instruction:
+{}
+
+### Input:
+{}
+
+### Response:
+{}"""
+
+
+def main():
+    # 출력 디렉토리 생성
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # ==========================================
+    # 1. 모델 로드
+    # ==========================================
+    print(f"🔄 모델 로드 중... ({MODEL_NAME})")
+    model, tokenizer = FastLanguageModel.from_pretrained(
+        model_name=MODEL_NAME,
+        max_seq_length=MAX_SEQ_LENGTH,
+        dtype=None,
+        load_in_4bit=True,
+    )
+
+    model = FastLanguageModel.get_peft_model(
+        model,
+        r=LORA_RANK,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                        "gate_proj", "up_proj", "down_proj"],
+        lora_alpha=16,
+        lora_dropout=0,
+        bias="none",
+        use_gradient_checkpointing="unsloth",
+        random_state=3407,
+    )
+
+    # ==========================================
+    # 2. 데이터셋 로드 및 분할
+    # ==========================================
+    print("📂 데이터셋 로딩 중...")
+    dataset = load_dataset("json", data_files=DATA_FILE, split="train")
+    dataset = dataset.train_test_split(test_size=0.2, seed=42)
+    train_dataset = dataset["train"]
+    eval_dataset = dataset["test"]
+
+    print(f"📊 데이터 분할: Train({len(train_dataset)}개) / Eval({len(eval_dataset)}개)")
+
+    eos_token = tokenizer.eos_token
+
+    def formatting_prompts_func(examples):
+        texts = []
+        for instruction, inp, output in zip(
+            examples["instruction"], examples["input"], examples["output"]
+        ):
+            text = ALPACA_PROMPT.format(instruction, inp, output) + eos_token
+            texts.append(text)
+        return {"text": texts}
+
+    train_dataset = train_dataset.map(formatting_prompts_func, batched=True)
+    eval_dataset = eval_dataset.map(formatting_prompts_func, batched=True)
+
+    # ==========================================
+    # 3. 트레이너 설정
+    # ==========================================
+    trainer = SFTTrainer(
+        model=model,
+        processing_class=tokenizer,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        args=SFTConfig(
+            dataset_text_field="text",
+            max_length=MAX_SEQ_LENGTH,
+            dataset_num_proc=1,
+            packing=False,
+            per_device_train_batch_size=4,
+            per_device_eval_batch_size=4,
+            gradient_accumulation_steps=4,
+            num_train_epochs=NUM_TRAIN_EPOCHS,
+            learning_rate=LEARNING_RATE,
+            fp16=False,
+            bf16=True,
+            optim="adamw_8bit",
+            weight_decay=0.01,
+            lr_scheduler_type="linear",
+            seed=3407,
+            output_dir=OUTPUT_DIR,
+            eval_strategy="steps",
+            eval_steps=5,
+            logging_steps=5,
+            save_strategy="steps",
+            save_steps=20,
+            save_total_limit=2,
+            load_best_model_at_end=True,
+            report_to="none",
+        ),
+    )
+
+    # ==========================================
+    # 4. 학습 실행
+    # ==========================================
+    print(f"🚀 실험 시작: {EXP_NAME} (LR={LEARNING_RATE}, Epoch={NUM_TRAIN_EPOCHS}, Rank={LORA_RANK})")
+    trainer.train()
+
+    print("🎉 학습 완료! 모델 저장 중...")
+    model.save_pretrained(OUTPUT_DIR)
+    tokenizer.save_pretrained(OUTPUT_DIR)
+    print(f"💾 저장 경로: {OUTPUT_DIR}")
+
+    # ==========================================
+    # 5. 학습 결과 시각화
+    # ==========================================
+    print("📊 그래프 그리는 중...")
+
+    history = trainer.state.log_history
+    train_loss, train_steps = [], []
+    eval_loss, eval_steps = [], []
+
+    for entry in history:
+        if 'loss' in entry:
+            train_loss.append(entry['loss'])
+            train_steps.append(entry['step'])
+        elif 'eval_loss' in entry:
+            eval_loss.append(entry['eval_loss'])
+            eval_steps.append(entry['step'])
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_steps, train_loss, label='Training Loss', color='blue', alpha=0.6)
+    plt.plot(eval_steps, eval_loss, label='Validation Loss', color='red', linewidth=2)
+    plt.title(f'Training vs Validation Loss ({EXP_NAME})')
+    plt.xlabel('Steps')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+
+    # 하이퍼파라미터를 포함한 고유 파일명
+    graph_filename = f"loss_LR{LEARNING_RATE}_EP{NUM_TRAIN_EPOCHS}_R{LORA_RANK}.png"
+    graph_path = os.path.join(OUTPUT_DIR, graph_filename)
+    plt.savefig(graph_path, dpi=150, bbox_inches='tight')
+    print(f"📈 그래프 저장됨: {graph_path}")
+    plt.close()
+
+
+if __name__ == '__main__':
+    main()
