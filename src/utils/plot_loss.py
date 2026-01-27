@@ -1,3 +1,4 @@
+import matplotlib
 import matplotlib.pyplot as plt
 
 # 로그에서 추출한 데이터 (Epoch 기준)

@@ -4,14 +4,15 @@ from datasets import load_dataset
 from trl.trainer.sft_trainer import SFTTrainer
 from trl.trainer.sft_config import SFTConfig
 import matplotlib.pyplot as plt
+import numpy as np
 
 # ==========================================
 # 실험 하이퍼파라미터 (이 부분을 바꿔가며 실험하세요)
 # ==========================================
-EXP_NAME = "Exp2_Overfitting"
-LEARNING_RATE = 2e-4
-NUM_TRAIN_EPOCHS = 1
-LORA_RANK = 16
+EXP_NAME = "Exp2_Overfitting"  # 실험 이름 (저장 폴더명)
+LEARNING_RATE = 2e-4           # 학습률 (2e-4, 2e-5, 2e-3 등 실험)
+NUM_TRAIN_EPOCHS = 3          # 에폭 (1, 5, 10 등 실험)
+LORA_RANK = 64                 # LoRA Rank (8, 16, 64 등 실험)
 
 # ==========================================
 # 설정
@@ -137,31 +138,70 @@ def main():
     # ==========================================
     print("📊 그래프 그리는 중...")
 
+        # 1. 로그 데이터 추출 (Steps 대신 Epoch 사용)
     history = trainer.state.log_history
-    train_loss, train_steps = [], []
-    eval_loss, eval_steps = [], []
+    train_loss = []
+    train_epochs = []
+    eval_loss = []
+    eval_epochs = []
 
     for entry in history:
-        if 'loss' in entry:
+        if 'loss' in entry: # Training Log
             train_loss.append(entry['loss'])
-            train_steps.append(entry['step'])
-        elif 'eval_loss' in entry:
+            train_epochs.append(entry['epoch'])
+        elif 'eval_loss' in entry: # Validation Log
             eval_loss.append(entry['eval_loss'])
-            eval_steps.append(entry['step'])
+            eval_epochs.append(entry['epoch'])
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_steps, train_loss, label='Training Loss', color='blue', alpha=0.6)
-    plt.plot(eval_steps, eval_loss, label='Validation Loss', color='red', linewidth=2)
-    plt.title(f'Training vs Validation Loss ({EXP_NAME})')
-    plt.xlabel('Steps')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.grid(True)
+    # 2. 최적점(Saturation Point) 자동 계산
+    # Validation Loss가 가장 낮은 지점을 찾습니다.
+    if len(eval_loss) > 0:
+        min_loss_idx = np.argmin(eval_loss)
+        min_val_loss = eval_loss[min_loss_idx]
+        best_epoch = eval_epochs[min_loss_idx]
+    else:
+        # 혹시 Eval 데이터가 없을 경우를 대비한 예외처리
+        best_epoch = 0
+        min_val_loss = 0
+
+    # 3. 그래프 스타일 설정
+    plt.figure(figsize=(12, 7)) # 크기를 조금 더 키움
+
+    # Train Loss (파란색 실선 + 원형 마커)
+    plt.plot(train_epochs, train_loss, 
+            label='Training Loss', 
+            marker='o', color='blue', linestyle='-', linewidth=1.5, markersize=5)
+
+    # Eval Loss (빨간색 점선 + X 마커)
+    plt.plot(eval_epochs, eval_loss, 
+            label='Validation Loss', 
+            marker='x', color='red', linestyle='--', linewidth=2, markersize=6)
+
+    # 4. 꾸미기 요소 (Grid, Title)
+    plt.title(f'Learning Curve: {EXP_NAME}', fontsize=14, pad=15)
+    plt.xlabel('Epochs', fontsize=12)
+    plt.ylabel('Loss', fontsize=12)
+    plt.legend(fontsize=11)
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5, alpha=0.7)
+
+    # 5. 최적점(Optimal Point) 시각화
+    if len(eval_loss) > 0:
+        plt.axvline(x=best_epoch, color='green', linestyle=':', linewidth=2, label='Optimal Point')
+        
+        # 텍스트 위치 자동 조정 (그래프 중간 높이)
+        text_y_pos = (max(train_loss) + min(train_loss)) / 2
+        
+        plt.text(best_epoch + 0.1, text_y_pos, 
+                f'Saturation Point\n(Epoch {best_epoch:.2f}, Loss {min_val_loss:.4f})', 
+                color='green', fontweight='bold', fontsize=10,
+                bbox=dict(facecolor='white', alpha=0.8, edgecolor='none'))
+
+    plt.tight_layout()
 
     # 하이퍼파라미터를 포함한 고유 파일명
     graph_filename = f"loss_LR{LEARNING_RATE}_EP{NUM_TRAIN_EPOCHS}_R{LORA_RANK}.png"
     graph_path = os.path.join(OUTPUT_DIR, graph_filename)
-    plt.savefig(graph_path, dpi=150, bbox_inches='tight')
+    plt.savefig(graph_path, dpi=300, bbox_inches='tight')
     print(f"📈 그래프 저장됨: {graph_path}")
     plt.close()
 
