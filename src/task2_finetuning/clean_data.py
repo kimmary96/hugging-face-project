@@ -7,10 +7,14 @@ CSV 파일을 읽어 학습용 JSONL 형식으로 변환합니다.
 
 import json
 import re
+from pathlib import Path
+
+# 프로젝트 루트 경로 (스크립트 위치 기준으로 계산)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # 파일 경로 (생성된 파일명과 일치시켜주세요)
-INPUT_FILE = "synthetic_train_data.jsonl"
-OUTPUT_FILE = "cleaned_train_data.jsonl"
+INPUT_FILE = PROJECT_ROOT / "data/raw/synthetic_train_data.jsonl"
+OUTPUT_FILE = PROJECT_ROOT / "cleaned_train_data1.jsonl"
 
 # 정규표현식: JSON 객체 { ... } 패턴을 찾기 위함
 json_pattern = re.compile(r'\{.*?\}', re.DOTALL)
