@@ -6,7 +6,7 @@ import json
 # 1. 설정
 # ==========================================
 # 방금 학습 끝난 어댑터가 저장된 폴더 경로
-ADAPTER_PATH = "outputs_checkpoint" 
+ADAPTER_PATH = "outputs_experiment/checkpoint-125" 
 MAX_SEQ_LENGTH = 2048
 
 # ==========================================

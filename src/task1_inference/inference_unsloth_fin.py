@@ -23,7 +23,7 @@ DTYPE = None # RTX 40시리즈는 자동으로 bfloat16이 적용됨 (가장 빠
 LOAD_IN_4BIT = True # 필수: 메모리를 1/4로 줄여줌
 
 EMBED_MODEL_ID = "BAAI/bge-m3"
-INPUT_FILE = "./data/raw/dummy_users.json"
+INPUT_FILE = "./data/raw/dummy_users1.json"
 OUTPUT_DIR = "./data/processed"
 OUTPUT_BASE = "user_profiles_qwen3_result"
 

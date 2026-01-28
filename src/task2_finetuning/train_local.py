@@ -76,7 +76,7 @@ def main():
     trainer = SFTTrainer(
         model=model,
         processing_class=tokenizer,
-        train_dataset=dataset,
+        train_dataset=dataset, # type: ignore
         args=SFTConfig(
             dataset_text_field="text",
             max_length=MAX_SEQ_LENGTH,

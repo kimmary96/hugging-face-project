@@ -11,7 +11,9 @@
       "Bash(git add:*)",
       "Bash(git commit -m \"$\\(cat <<''EOF''\nREADME.md 및 requirements.txt 업데이트: 폴더 구조, 기술 스택 현행화 및 tabulate 의존성 추가\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git push:*)",
-      "Bash(py -m py_compile:*)"
+      "Bash(py -m py_compile:*)",
+      "Bash(/c/Users/User/AppData/Local/Programs/Python/Python312/python.exe:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
