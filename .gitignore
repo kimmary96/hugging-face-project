@@ -12,6 +12,8 @@ danggeun_ai/
 # 데이터셋 (용량이 클 수 있으므로 제외, 필요시 raw만 포함)
 data/processed/*
 !data/processed/.gitkeep
+!data/processed/blind_test_*.md
+!data/processed/comparison_result.md
 
 # 모델 가중치 및 체크포인트 (절대 올리면 안 됨 - 용량 초과)
 saved_models/*
@@ -32,3 +34,14 @@ saved_models/unsloth_lora_model/*
 
 # 맥(Mac) 사용자라면
 .DS_Store
+
+# 임시 파일 (VS Code Code Runner)
+**/tempCodeRunnerFile.py
+
+# 출력 모델 (대용량)
+outputs_1.7b/
+outputs_checkpoint/
+outputs_experiments/
+
+# Claude 로컬 설정
+.claude/settings.local.json

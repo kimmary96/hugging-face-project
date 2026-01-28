@@ -1,0 +1,285 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>당근모임 AI 추천</title>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        
+        body {
+            font-family: Pretendard, -apple-system, system-ui, Roboto, sans-serif;
+            background-color: #f8f9fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .phone-frame {
+            width: 375px;
+            height: 812px;
+            background-color: white;
+            border-radius: 40px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.15);
+            overflow: hidden;
+            position: relative;
+            border: 8px solid #111;
+        }
+        /* 헤더 */
+        .header {
+            padding: 50px 20px 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+        }
+        .header-title { font-size: 18px; font-weight: 700; }
+        .header-icons { font-size: 20px; letter-spacing: 10px; }
+
+        /* 탭 */
+        .tabs {
+            display: flex;
+            padding: 0 20px;
+            border-bottom: 1px solid #eee;
+            margin-bottom: 10px;
+        }
+        .tab {
+            padding: 12px 0;
+            margin-right: 20px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #888;
+            cursor: pointer;
+        }
+        .tab.active {
+            color: #222;
+            border-bottom: 2px solid #222;
+        }
+
+        /* 컨텐츠 */
+        .content {
+            padding: 16px;
+            height: 600px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+        }
+
+        /* AI 추천 버블 (개선됨) */
+        .ai-card {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            position: relative;
+            border: 1px solid #ffe0b2;
+        }
+        .ai-badge {
+            display: inline-block;
+            background: #ff6f0f;
+            color: white;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 4px 8px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        .ai-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #222;
+            margin-bottom: 6px;
+        }
+        .ai-text {
+            font-size: 13px;
+            color: #555;
+            line-height: 1.5;
+        }
+
+        /* 모임 리스트 섹션 */
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            padding-left: 4px;
+        }
+
+        /* 모임 카드 (해쉬태그 스타일 적용) */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 14px;
+            position: relative;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: transform 0.1s;
+        }
+        .card:active { transform: scale(0.98); }
+        
+        .card-img {
+            width: 80px;
+            height: 80px;
+            border-radius: 12px;
+            background-size: cover;
+            background-position: center;
+            flex-shrink: 0;
+        }
+        
+        .card-info {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #222;
+            margin-bottom: 6px;
+            line-height: 1.3;
+        }
+        
+        .card-meta {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 8px;
+        }
+
+        /* 해쉬태그 스타일 */
+        .tags-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+        .hash-tag {
+            background-color: #f1f3f5;
+            color: #495057;
+            font-size: 10px;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .match-score {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            color: #ff6f0f;
+            font-size: 11px;
+            font-weight: 700;
+            background: #fff0e6;
+            padding: 4px 8px;
+            border-radius: 12px;
+        }
+
+        /* 하단 탭바 */
+        .bottom-nav {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 65px;
+            background: white;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding-bottom: 15px;
+        }
+        .nav-item {
+            text-align: center;
+            font-size: 10px;
+            color: #888;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .nav-icon { font-size: 22px; margin-bottom: 2px; }
+        .nav-item.active { color: #222; font-weight: 600; }
+
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="header">
+            <div class="header-title">강남역</div>
+            <div class="header-icons">🔍 🔔 ☰</div>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab">동네생활</div>
+            <div class="tab active">모임</div>
+            <div class="tab">동네맛집</div>
+        </div>
+
+        <div class="content">
+            <div class="ai-card">
+                <div class="ai-badge">AI 추천 이유</div>
+                <div class="ai-title">"성장을 위한 준비가 완벽하시네요!" 🚀</div>
+                <div class="ai-text">
+                    전문적인 장비들과 서적을 구매하신 걸 보니, <b>깊이 있는 성장을 추구하는 전문가</b>이시군요! 가벼운 취미보다는, 실력을 확실히 키울 수 있는 <b>밀도 높은 스터디</b>를 찾아왔어요.
+                </div>
+            </div>
+
+            <div class="section-title">개인화 추천 TOP 3</div>
+            
+            
+        <div class="card">
+            <div class="card-img" style="background-color: #ede7f6; background-image: url('https://placehold.co/80x80/ede7f6/555?text=자기');"></div>
+            <div class="card-info">
+                <div class="card-title">사이드 프로젝트 팀원 모집</div>
+                <div class="card-meta">
+                    격주 목요일 · 을지로 · 8/16
+                </div>
+                <div class="tags-row">
+                    <span class="hash-tag">#고인물</span> <span class="hash-tag">#정기모임</span> <span class="hash-tag">#진지함</span> <span class="hash-tag">#또래중심</span> 
+                </div>
+            </div>
+            <div class="match-score">⚡ 100% 매칭</div>
+        </div>
+        
+        <div class="card">
+            <div class="card-img" style="background-color: #ede7f6; background-image: url('https://placehold.co/80x80/ede7f6/555?text=자기');"></div>
+            <div class="card-info">
+                <div class="card-title">직장인 주식/부동산 투자 토론</div>
+                <div class="card-meta">
+                    매주 수 저녁 7시 · 역삼동 · 8/15
+                </div>
+                <div class="tags-row">
+                    <span class="hash-tag">#고인물</span> <span class="hash-tag">#정기모임</span> <span class="hash-tag">#진지함</span> <span class="hash-tag">#또래중심</span> 
+                </div>
+            </div>
+            <div class="match-score">⚡ 100% 매칭</div>
+        </div>
+        
+        <div class="card">
+            <div class="card-img" style="background-color: #ede7f6; background-image: url('https://placehold.co/80x80/ede7f6/555?text=자기');"></div>
+            <div class="card-info">
+                <div class="card-title">주말 아침 영어회화 (중급)</div>
+                <div class="card-meta">
+                    매주 수 저녁 7시 · 역삼동 · 8/18
+                </div>
+                <div class="tags-row">
+                    <span class="hash-tag">#고인물</span> <span class="hash-tag">#정기모임</span> <span class="hash-tag">#진지함</span> <span class="hash-tag">#또래중심</span> 
+                </div>
+            </div>
+            <div class="match-score">⚡ 100% 매칭</div>
+        </div>
+        
+
+            <div style="height: 100px;"></div>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item"><span class="nav-icon">🏠</span>홈</div>
+            <div class="nav-item"><span class="nav-icon">📍</span>동네생활</div>
+            <div class="nav-item"><span class="nav-icon">🗺️</span>동네지도</div>
+            <div class="nav-item"><span class="nav-icon">💬</span>채팅</div>
+            <div class="nav-item active"><span class="nav-icon">👤</span>나의 당근</div>
+        </div>
+    </div>
+</body>
+</html>

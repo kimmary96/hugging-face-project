@@ -1,0 +1,290 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>당근모임 추천</title>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        
+        body {
+            font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: #f2f3f6; /* 당근 배경색 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .phone-frame {
+            width: 375px;
+            height: 812px;
+            background-color: white;
+            border-radius: 40px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.12);
+            overflow: hidden;
+            position: relative;
+            border: 8px solid #1a1a1a;
+        }
+        /* 헤더 영역 */
+        .header {
+            background-color: white;
+            padding: 40px 20px 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .location-title { font-size: 18px; font-weight: 700; color: #212124; }
+        .header-icons span { font-size: 20px; margin-left: 15px; cursor: pointer; }
+        
+        /* 탭 메뉴 */
+        .tab-menu {
+            display: flex;
+            padding: 0 20px;
+            border-bottom: 1px solid #ececec;
+            background: white;
+        }
+        .tab {
+            padding: 12px 0;
+            margin-right: 20px;
+            font-size: 15px;
+            color: #868b94;
+            font-weight: 600;
+            cursor: pointer;
+            position: relative;
+        }
+        .tab.active { color: #212124; }
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background-color: #212124;
+        }
+
+        /* 메인 컨텐츠 */
+        .content {
+            padding: 20px;
+            height: 640px;
+            overflow-y: auto;
+            background-color: #f2f3f6;
+        }
+        
+        .section-header { margin-bottom: 16px; }
+        .section-title { font-size: 19px; font-weight: 700; color: #212124; margin-bottom: 4px; }
+        .section-subtitle { font-size: 13px; color: #868b94; }
+        .view-all { float: right; font-size: 13px; color: #868b94; margin-top: 5px; }
+
+        /* 모임 카드 스타일 */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+            display: flex;
+            gap: 16px;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            transition: transform 0.1s;
+        }
+        .card:active { transform: scale(0.98); }
+        
+        .card-img {
+            width: 80px;
+            height: 80px;
+            border-radius: 12px;
+            background-size: cover;
+            background-position: center;
+            flex-shrink: 0;
+        }
+        
+        .card-info { flex-grow: 1; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        .card-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #212124;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+        
+        .card-desc {
+            font-size: 12px;
+            color: #868b94;
+            margin-bottom: 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .card-meta {
+            font-size: 11px;
+            color: #868b94;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* 매칭 점수 뱃지 (우측 상단) */
+        .match-badge {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            border: 1px solid #ff6f0f;
+            color: #ff6f0f;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 6px;
+            border-radius: 6px;
+            background: #fff;
+        }
+
+        /* 추천 이유 팝업 (AI Bubble) */
+        .ai-bubble {
+            position: absolute;
+            top: 130px; /* 첫 번째 카드 위 */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 85%;
+            background: white;
+            padding: 16px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            z-index: 10;
+            border: 1px solid #eee;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .ai-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 8px 8px 0;
+            border-style: solid;
+            border-color: white transparent transparent transparent;
+        }
+        .ai-title { font-size: 13px; font-weight: 700; color: #212124; margin-bottom: 6px; display: flex; align-items: center; gap: 5px;}
+        .ai-text { font-size: 13px; color: #4d5159; line-height: 1.5; }
+        
+        @keyframes popIn {
+            from { opacity: 0; transform: translate(-50%, 10px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+
+        /* 하단 네비게이션 */
+        .bottom-nav {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 60px;
+            background: white;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding-bottom: 10px;
+        }
+        .nav-item { text-align: center; color: #212124; font-size: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px;}
+        .nav-icon { font-size: 20px; }
+        .nav-item.active { color: #ff6f0f; }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="header">
+            <div class="location-title">봉천동</div>
+            <div class="header-icons">
+                <span>🔍</span><span>🔔</span><span>☰</span>
+            </div>
+        </div>
+        
+        <div class="tab-menu">
+            <div class="tab">동네생활</div>
+            <div class="tab active">모임</div>
+            <div class="tab">카페</div>
+        </div>
+
+        <div class="content">
+            <div class="ai-bubble">
+                <div class="ai-title">
+                    <span style="background:#ff6f0f; color:white; padding:2px 6px; border-radius:4px; font-size:10px;">AI</span>
+                    추천 이유
+                </div>
+                <div class="ai-text">
+                    최근 <b>가족/육아</b> 관련 물품을 구매하셨네요! 성향상 <b>고인물</b>이시면서 <b>정기모임</b>을 선호하시는 것 같아, 꼭 맞는 모임을 찾아왔어요.
+                </div>
+            </div>
+
+            <div class="section-header">
+                <div class="view-all">전체보기 ></div>
+                <div class="section-title">개인화 추천 TOP 3</div>
+                <div class="section-subtitle">내 활동/취향 기반으로 모임을 골랐어요</div>
+            </div>
+
+            
+        <div class="card">
+            <div class="card-img" style="background-color: #fce4ec; background-image: url('https://placehold.co/80x80/fce4ec/555?text=가족');"></div>
+            <div class="card-info">
+                <div>
+                    <div class="card-title">공동육아 품앗이</div>
+                    <div class="card-desc">#고인물 · #진지함 · #또래중심</div>
+                </div>
+                <div class="card-meta">
+                    <span>📅 주말 오전</span>
+                    <span>📍 사당동</span>
+                    <span>👥 3/7 참여중</span>
+                </div>
+            </div>
+            <div class="match-badge">✨ 나랑 100점</div>
+        </div>
+        
+        <div class="card">
+            <div class="card-img" style="background-color: #fce4ec; background-image: url('https://placehold.co/80x80/fce4ec/555?text=가족');"></div>
+            <div class="card-info">
+                <div>
+                    <div class="card-title">초등맘 정보공유</div>
+                    <div class="card-desc">#초보환영 · #진지함 · #또래중심</div>
+                </div>
+                <div class="card-meta">
+                    <span>📅 이번 주 토</span>
+                    <span>📍 봉천동</span>
+                    <span>👥 6/9 참여중</span>
+                </div>
+            </div>
+            <div class="match-badge">✨ 나랑 75점</div>
+        </div>
+        
+        <div class="card">
+            <div class="card-img" style="background-color: #fce4ec; background-image: url('https://placehold.co/80x80/fce4ec/555?text=가족');"></div>
+            <div class="card-info">
+                <div>
+                    <div class="card-title">우리아이 친구 만들기</div>
+                    <div class="card-desc">#고인물 · #가벼움 · #전연령</div>
+                </div>
+                <div class="card-meta">
+                    <span>📅 매주 금요일</span>
+                    <span>📍 사당동</span>
+                    <span>👥 9/16 참여중</span>
+                </div>
+            </div>
+            <div class="match-badge">✨ 나랑 50점</div>
+        </div>
+        
+
+            <div style="height: 100px;"></div>
+        </div>
+
+        <div class="bottom-nav">
+            <div class="nav-item"><span class="nav-icon">🏠</span>홈</div>
+            <div class="nav-item"><span class="nav-icon">📍</span>동네생활</div>
+            <div class="nav-item"><span class="nav-icon">📍</span>동네지도</div>
+            <div class="nav-item"><span class="nav-icon">💬</span>채팅</div>
+            <div class="nav-item active"><span class="nav-icon">👤</span>나의 당근</div>
+        </div>
+    </div>
+</body>
+</html>

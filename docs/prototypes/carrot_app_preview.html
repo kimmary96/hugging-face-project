@@ -1,0 +1,181 @@
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>당근모임 AI 추천</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .phone-frame {
+            width: 375px;
+            height: 812px;
+            background-color: white;
+            border-radius: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+            position: relative;
+            border: 8px solid #333;
+        }
+        .header {
+            background-color: white;
+            padding: 20px 20px 10px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            padding-top: 50px; /* Notch area */
+        }
+        .header h1 {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0;
+            flex-grow: 1;
+        }
+        .badge-orange {
+            color: #ff6f0f;
+            font-weight: bold;
+        }
+        .content {
+            padding: 20px;
+            background-color: #f8f9fa;
+            height: 100%;
+            overflow-y: scroll;
+        }
+        .user-analysis {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .analysis-title {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .tag {
+            background-color: #ffece0;
+            color: #ff6f0f;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            margin-top: 10px;
+        }
+        .meeting-card {
+            background-color: white;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border: 1px solid transparent;
+            transition: 0.2s;
+        }
+        .meeting-card.top-pick {
+            border: 2px solid #ff6f0f;
+        }
+        .meeting-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+        }
+        .meeting-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: #222;
+        }
+        .match-score {
+            background-color: #ff6f0f;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .meeting-tags {
+            font-size: 12px;
+            color: #888;
+        }
+        .detail-row {
+            display: flex;
+            gap: 5px;
+            font-size: 12px;
+        }
+        .check-icon { color: #2ecc71; }
+        .cross-icon { color: #e74c3c; }
+        
+        .bottom-nav {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 70px;
+            background-color: white;
+            border-top: 1px solid #eee;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+        .nav-item {
+            font-size: 24px;
+            color: #ccc;
+        }
+        .nav-item.active {
+            color: #222;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="header">
+            <span>🔙</span>
+            <h1 style="margin-left: 10px;">당근모임</h1>
+            <span>🔍</span>
+        </div>
+        
+        <div class="content">
+            <div class="user-analysis">
+                <div class="analysis-title">✨ 고객님 구매 패턴 분석 결과</div>
+                <div class="tags-container">
+                    <span class="tag">#육아</span>
+                    <span class="tag">#고인물</span><span class="tag">#정기모임</span><span class="tag">#진지함</span><span class="tag">#또래중심</span>
+                </div>
+            </div>
+
+            <div class="section-title">
+                <span class="badge-orange">AI</span>가 찾은 추천 모임
+            </div>
+
+            <div style='text-align:center; color:#999; margin-top:50px;'>추천 모임이 없습니다 😢</div>
+
+            <div style="height: 100px;"></div> </div>
+
+        <div class="bottom-nav">
+            <span class="nav-item">🏠</span>
+            <span class="nav-item">📍</span>
+            <span class="nav-item">💬</span>
+            <span class="nav-item active">👤</span>
+        </div>
+    </div>
+</body>
+</html>
